@@ -1,0 +1,309 @@
+---
+title: 'Speaking & Text-to-Speech'
+description: 'Convert text to speech using default or custom voices'
+icon: 'volume'
+---
+
+## Overview
+
+OpenHome provides two methods for text-to-speech:
+- **`speak()`** - Uses the Agent's default voice
+- **`text_to_speech()`** - Uses a specific voice ID for custom voices
+
+Both methods stream audio to the user in real-time.
+
+<Note>
+Keep TTS output to 1-2 sentences for natural conversation flow. This is voice, not text.
+</Note>
+
+---
+
+## speak()
+
+Converts text to speech using the **Agent's default voice**. This is the most common method for voice output.
+
+### Signature
+
+```python
+await self.capability_worker.speak(text: str) -> None
+```
+
+<ParamField path="text" type="string" required>
+  The text to convert to speech. Keep it concise (1-2 sentences).
+</ParamField>
+
+### Returns
+
+`None` - Audio is streamed to the user
+
+### Examples
+
+<CodeGroup>
+
+```python Basic Usage
+await self.capability_worker.speak("Hello! How can I help you today?")
+```
+
+```python With Variable
+user_name = "Chris"
+await self.capability_worker.speak(f"Welcome back, {user_name}!")
+```
+
+```python Error Handling
+try:
+    result = api_call()
+    await self.capability_worker.speak(f"Found {len(result)} items.")
+except Exception as e:
+    self.worker.editor_logging_handler.error(f"API error: {e}")
+    await self.capability_worker.speak("Sorry, something went wrong.")
+```
+
+```python Multiple Outputs
+await self.capability_worker.speak("Let me check that for you.")
+# ... do work ...
+await self.capability_worker.speak("Here's what I found.")
+```
+
+</CodeGroup>
+
+### When to Use
+
+- ✅ General Ability output
+- ✅ Quick responses and confirmations
+- ✅ Error messages
+- ✅ When you want consistent voice across the Agent
+
+---
+
+## text_to_speech()
+
+Converts text to speech using a **specific voice ID**. Use this when your Ability needs its own distinct voice personality.
+
+### Signature
+
+```python
+await self.capability_worker.text_to_speech(text: str, voice_id: str) -> None
+```
+
+<ParamField path="text" type="string" required>
+  The text to convert to speech
+</ParamField>
+
+<ParamField path="voice_id" type="string" required>
+  ElevenLabs voice ID. See [Voice ID Reference](#voice-id-reference) below.
+</ParamField>
+
+### Returns
+
+`None` - Audio is streamed to the user
+
+### Examples
+
+<CodeGroup>
+
+```python Custom Voice
+# Use a deep male narrator voice
+VOICE_ID = "pNInz6obpgDQGcFmaJgB"
+await self.capability_worker.text_to_speech("Welcome aboard.", VOICE_ID)
+```
+
+```python Ability-Specific Voice
+class StorytellerAbility(MatchingCapability):
+    NARRATOR_VOICE = "21m00Tcm4TlvDq8ikWAM"  # Calm female
+    
+    async def tell_story(self, story: str):
+        await self.capability_worker.text_to_speech(
+            story,
+            self.NARRATOR_VOICE
+        )
+```
+
+```python Voice Helper Method
+class MyAbility(MatchingCapability):
+    ABILITY_VOICE = "TxGEqnHWrfWFTfGW9XjX"
+    
+    async def speak_custom(self, text: str):
+        """Speak with this Ability's custom voice."""
+        await self.capability_worker.text_to_speech(text, self.ABILITY_VOICE)
+    
+    async def run(self):
+        await self.speak_custom("Using my special voice!")
+        self.capability_worker.resume_normal_flow()
+```
+
+</CodeGroup>
+
+### When to Use
+
+- ✅ Character voices (storytelling, games)
+- ✅ Brand-specific voice personality
+- ✅ Different voice for different content types (e.g., news vs. meditation)
+- ✅ Non-English languages requiring specific accents
+
+---
+
+## Voice ID Reference
+
+Voice IDs are from ElevenLabs. Use these with `text_to_speech()`.
+
+### Featured Voices
+
+<AccordionGroup>
+
+<Accordion title="American Voices" icon="flag-usa">
+
+**Female**
+
+| Voice ID | Gender | Tone | Best For |
+|----------|--------|------|----------|
+| `21m00Tcm4TlvDq8ikWAM` | Female | Calm | Narration |
+| `EXAVITQu4vr4xnSDxMaL` | Female | Soft | News |
+| `XrExE9yKIg1WjnnlVkGX` | Female | Warm | Audiobooks |
+| `pMsXgVXv3BLzUgSXRplE` | Female | Pleasant | Interactive |
+
+**Male**
+
+| Voice ID | Gender | Tone | Best For |
+|----------|--------|------|----------|
+| `ErXwobaYiN019PkySvjV` | Male | Well-rounded | Narration |
+| `GBv7mTt0atIp3Br8iCZE` | Male | Calm | Meditation |
+| `TxGEqnHWrfWFTfGW9XjX` | Male | Deep | Narration |
+| `pNInz6obpgDQGcFmaJgB` | Male | Deep | Narration |
+
+</Accordion>
+
+<Accordion title="British Voices" icon="flag-uk">
+
+| Voice ID | Gender | Tone | Best For |
+|----------|--------|------|----------|
+| `ThT5KcBeYPX3keUQqHPh` | Female | Pleasant | Children's content |
+| `onwK4e9ZLuTAKqWW03F9` | Male | Deep | News |
+
+</Accordion>
+
+<Accordion title="Other Accents" icon="globe">
+
+| Voice ID | Accent | Gender | Tone | Best For |
+|----------|--------|--------|------|----------|
+| `D38z5RcWu1voky8WS1ja` | Irish | Male | Sailor | Games/Characters |
+| `IKne3meq5aSn9XLyUdCD` | Australian | Male | Casual | Conversation |
+
+</Accordion>
+
+</AccordionGroup>
+
+<Tip>
+Test voices in the [OpenHome Dashboard](https://app.openhome.com/dashboard/home) to hear samples before using them in your Ability.
+</Tip>
+
+---
+
+## Best Practices
+
+### Keep It Conversational
+
+<CodeGroup>
+
+```python Good ✅
+await self.capability_worker.speak("Got it. Let me check that.")
+```
+
+```python Avoid ❌
+await self.capability_worker.speak(
+    "Acknowledged. Initiating data retrieval process from external API endpoint."
+)
+```
+
+</CodeGroup>
+
+### Break Long Output Into Chunks
+
+<CodeGroup>
+
+```python Good ✅
+await self.capability_worker.speak("Here are your reminders.")
+for reminder in reminders[:3]:
+    await self.capability_worker.speak(reminder)
+```
+
+```python Avoid ❌
+long_text = "\n".join(reminders)  # 10+ sentences
+await self.capability_worker.speak(long_text)
+```
+
+</CodeGroup>
+
+### Always Speak Errors
+
+<CodeGroup>
+
+```python Good ✅
+try:
+    data = fetch_data()
+except Exception as e:
+    self.worker.editor_logging_handler.error(f"Fetch failed: {e}")
+    await self.capability_worker.speak("Sorry, I couldn't get that information.")
+```
+
+```python Avoid ❌
+try:
+    data = fetch_data()
+except Exception as e:
+    self.worker.editor_logging_handler.error(f"Fetch failed: {e}")
+    # Silent failure - user hears nothing!
+```
+
+</CodeGroup>
+
+---
+
+## Common Patterns
+
+### Confirmation Before Action
+
+```python
+await self.capability_worker.speak("I found 3 unread emails.")
+confirmed = await self.capability_worker.run_confirmation_loop(
+    "Would you like me to read them?"
+)
+if confirmed:
+    # read emails
+```
+
+### Progress Updates
+
+```python
+await self.capability_worker.speak("Searching...")
+results = search_api(query)
+await self.capability_worker.speak(f"Found {len(results)} results.")
+```
+
+### Dynamic Voice Selection
+
+```python
+VOICE_MAP = {
+    "news": "onwK4e9ZLuTAKqWW03F9",  # Deep British
+    "meditation": "GBv7mTt0atIp3Br8iCZE",  # Calm American
+    "story": "21m00Tcm4TlvDq8ikWAM",  # Calm Female
+}
+
+async def speak_with_mode(self, text: str, mode: str):
+    voice_id = VOICE_MAP.get(mode)
+    if voice_id:
+        await self.capability_worker.text_to_speech(text, voice_id)
+    else:
+        await self.capability_worker.speak(text)
+```
+
+---
+
+## Related Methods
+
+<CardGroup cols={2}>
+  <Card title="Listening" icon="microphone" href="/api/listening">
+    Combine with user_response() for two-way conversation
+  </Card>
+  <Card title="Audio" icon="music" href="/api/audio">
+    Play pre-recorded audio files
+  </Card>
+</CardGroup>

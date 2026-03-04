@@ -1,0 +1,289 @@
+---
+title: 'Perplexity Search'
+description: 'AI-powered web search with real-time answers'
+icon: 'magnifying-glass'
+---
+
+## What It Does
+
+Instantly searches the web for real-time answers using the Perplexity AI API (Sonar Pro). Just ask anything — "What's the weather in Tokyo?" or "Latest news on AI?" — and it returns a concise, spoken-friendly answer without symbols or jargon.
+
+## Suggested Trigger Words
+
+- "search"
+- "tell me about"
+- "what is"
+- "who is"
+
+## Key Features
+
+<CardGroup cols={2}>
+  <Card title="Real-Time Search" icon="globe">
+    Access current information from the web, not just LLM training data
+  </Card>
+  <Card title="Clean Answers" icon="broom">
+    Automatically removes citations and symbols for natural speech
+  </Card>
+  <Card title="Fast Response" icon="bolt">
+    Optimized for quick answers with max_tokens=150
+  </Card>
+  <Card title="Sonar Pro Model" icon="satellite-dish">
+    Uses Perplexity's most advanced search model
+  </Card>
+</CardGroup>
+
+## How It Works
+
+<Steps>
+  <Step title="User Query">
+    User asks a question using a trigger word
+  </Step>
+  <Step title="Immediate Acknowledgment">
+    "Let me check that for you real quick"
+  </Step>
+  <Step title="API Request">
+    Sends query to Perplexity Sonar Pro with search capabilities enabled
+  </Step>
+  <Step title="Response Cleaning">
+    Strips citation markers [1], [2], etc. and extra whitespace
+  </Step>
+  <Step title="Spoken Answer">
+    Delivers clean, conversational answer via TTS
+  </Step>
+</Steps>
+
+## API Requirements
+
+<Warning>
+  **Perplexity AI API key required.** Get one at [perplexity.ai/settings/api](https://www.perplexity.ai/settings/api)
+</Warning>
+
+### Setup Instructions
+
+1. Visit [perplexity.ai/settings/api](https://www.perplexity.ai/settings/api)
+2. Create an API key
+3. Replace `YOUR_API_KEY` in `main.py` with your actual key:
+
+```python
+api_key = "pplx-abc123..."  # Your real key here
+```
+
+## Code Walkthrough
+
+### API Configuration
+
+Optimized for quick, spoken-friendly responses:
+
+```python
+payload = {
+    "model": "sonar-pro",  # sonar or sonar-pro both work
+    "temperature": 0.2,
+    "disable_runs": False,
+    "top_p": 0.9,
+    "max_tokens": 150,
+    "messages": [
+        {
+            "role": "system",
+            "content": (
+                """
+                Give a short, clear answer in simple spoken language.
+                Do not use symbols, citations, or abbreviations.
+                """
+            )
+        },
+        {
+            "role": "user",
+            "content": f"{msg}"
+        }
+    ]
+}
+```
+
+<Info>
+  **Model Choice**: `sonar-pro` provides more accurate results. Use `sonar` for faster/cheaper queries.
+</Info>
+
+### API Request with Timing
+
+Logs response time for debugging:
+
+```python
+start_time = time.time()
+
+# Send the request to Perplexity
+response = requests.post(
+    "https://api.perplexity.ai/chat/completions",
+    headers={
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json"
+    },
+    json=payload
+)
+
+end_time = time.time()
+response_time = round(end_time - start_time, 3)
+
+self.worker.editor_logging_handler.info(f"⏱️ API Response Time: {response_time} seconds")
+```
+
+### Response Extraction and Cleaning
+
+Removes citations and cleans up formatting:
+
+```python
+try:
+    result = response.json()
+    self.worker.editor_logging_handler.info(f"✅ Parsed JSON Response:\n{json.dumps(result, indent=2)}")
+except Exception as e:
+    self.worker.editor_logging_handler.info(f"❌ Failed to parse JSON: {e}")
+    result = {}
+
+# Extract the assistant's message (final summary)
+search_result = result.get("choices", [{}])[0].get("message", {}).get("content", "Sorry, I couldn't find anything.")
+
+# Remove citation markers like [1], [2], etc.
+search_result = re.sub(r"\[\d+\]", "", search_result)
+search_result = search_result.replace("  ", " ").strip()
+```
+
+### Delivery
+
+```python
+# Speak the final summarized result
+await self.capability_worker.speak("Here's what I found:")
+await self.capability_worker.speak(search_result)
+
+# Resume the normal workflow
+self.capability_worker.resume_normal_flow()
+```
+
+## Example Conversations
+
+<CodeGroup>
+```text Simple Query
+User: What's the capital of Australia?
+
+AI: Let me check that for you real quick...
+
+AI: Here's what I found: The capital of Australia is Canberra, 
+    not Sydney as many people assume.
+```
+
+```text News Query
+User: Latest news on SpaceX
+
+AI: Let me check that for you real quick...
+
+AI: Here's what I found: SpaceX recently completed a successful 
+    Starship test flight, marking a major milestone in their Mars 
+    mission program.
+```
+
+```text Fact Check
+User: Who won the 2024 World Series?
+
+AI: Let me check that for you real quick...
+
+AI: Here's what I found: The Los Angeles Dodgers won the 2024 
+    World Series, defeating the New York Yankees.
+```
+</CodeGroup>
+
+## Advanced Configuration
+
+### Adjusting Response Length
+
+```python
+"max_tokens": 150,  # Shorter, punchier answers
+"max_tokens": 300,  # More detailed explanations
+```
+
+### Temperature Control
+
+```python
+"temperature": 0.2,  # More factual, deterministic
+"temperature": 0.7,  # More creative, varied responses
+```
+
+### Model Selection
+
+<Tabs>
+  <Tab title="sonar-pro">
+    **Best for:** Accurate, detailed answers
+    
+    **Cost:** Higher per query
+    
+    **Use when:** User needs reliable, in-depth information
+  </Tab>
+  <Tab title="sonar">
+    **Best for:** Quick, simple queries
+    
+    **Cost:** Lower per query
+    
+    **Use when:** Speed and cost matter more than depth
+  </Tab>
+</Tabs>
+
+## Extending This Ability
+
+<CardGroup cols={2}>
+  <Card title="Follow-up Questions" icon="comments">
+    Add conversation loop to allow multi-turn research sessions
+  </Card>
+  <Card title="Source Citations" icon="link">
+    Parse and speak source URLs for fact-checking
+  </Card>
+  <Card title="Category Detection" icon="tag">
+    Route different query types to different models or parameters
+  </Card>
+  <Card title="Search History" icon="clock-rotate-left">
+    Store and recall previous searches across sessions
+  </Card>
+</CardGroup>
+
+## Why Use Perplexity Instead of LLM?
+
+<Accordion title="Real-Time Information">
+Perplexity searches the web for current information, while base LLMs only know information up to their training cutoff date.
+
+**Example:** "What's the current price of Bitcoin?" needs live data.
+</Accordion>
+
+<Accordion title="Factual Accuracy">
+Perplexity cites and verifies sources, reducing hallucinations for factual queries.
+
+**Example:** "When was the last SpaceX launch?" requires verified data.
+</Accordion>
+
+<Accordion title="News and Events">
+Perfect for queries about recent news, sports scores, stock prices, or weather.
+
+**Example:** "Who won the game last night?" needs current information.
+</Accordion>
+
+<Tip>
+  Perplexity is ideal for factual, time-sensitive queries. For creative tasks or advice, the base LLM is often better.
+</Tip>
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Error: 401 Unauthorized">
+    Your API key is invalid or expired. Check that you've correctly replaced `YOUR_API_KEY` in the code.
+  </Accordion>
+  
+  <Accordion title="Error: 429 Rate Limited">
+    You've exceeded your API quota. Check your usage at [perplexity.ai/settings/api](https://www.perplexity.ai/settings/api)
+  </Accordion>
+  
+  <Accordion title="Empty or Incomplete Answers">
+    Try increasing `max_tokens` from 150 to 250 for longer responses.
+  </Accordion>
+  
+  <Accordion title="Citation Numbers in Speech">
+    The cleaning regex should remove `[1]`, `[2]` markers. Check that this line is present:
+    ```python
+    search_result = re.sub(r"\[\d+\]", "", search_result)
+    ```
+  </Accordion>
+</AccordionGroup>

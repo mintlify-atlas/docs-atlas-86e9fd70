@@ -1,0 +1,553 @@
+---
+title: "Ability Templates"
+description: "Official starter templates for building OpenHome abilities"
+---
+
+OpenHome provides official templates for every common ability pattern. Each template is a minimal, working boilerplate that demonstrates a core architectural approach.
+
+## Template Overview
+
+Every ability falls into one of three categories:
+
+| Type | Trigger | Lifecycle | Entry File |
+|------|---------|-----------|------------|
+| **Skill** | User hotword or brain routing | Runs once, exits | `main.py` |
+| **Background Daemon** | Automatic on session start | Runs continuously in a loop | `watcher.py` |
+| **Local** | User or system | Runs on-device hardware | DevKit SDK |
+
+<Note>
+**Skill** is the workhorse—triggered by a hotword, runs its task, and hands control back via `resume_normal_flow()`.
+
+**Background Daemon** starts automatically when a user connects and runs in a `while True` loop for the entire session.
+
+**Local** abilities run directly on Raspberry Pi hardware, bypassing the cloud sandbox entirely.
+</Note>
+
+---
+
+## Starter Templates
+
+### basic-template
+
+**Type:** Skill · **Complexity:** Minimal
+
+The absolute minimum scaffolding for a working Skill. Use this as your starting point for any new Skill.
+
+**Key SDK methods:** `speak()`, `user_response()`, `resume_normal_flow()`
+
+<CodeGroup>
+```python main.py
+from src.agent.capability import MatchingCapability
+from src.main import AgentWorker
+from src.agent.capability_worker import CapabilityWorker
+
+class BasicTemplateCapability(MatchingCapability):
+    worker: AgentWorker = None
+    capability_worker: CapabilityWorker = None
+
+    #{{register capability}}
+
+    async def run(self):
+        # Greet the user
+        await self.capability_worker.speak("Hi! How can I help you today?")
+        
+        # Listen for input
+        user_input = await self.capability_worker.user_response()
+        
+        # Generate a response
+        response = self.capability_worker.text_to_text_response(
+            f"Give a short, helpful response to: {user_input}"
+        )
+        
+        # Speak the response
+        await self.capability_worker.speak(response)
+        
+        # IMPORTANT: Always call this when done
+        self.capability_worker.resume_normal_flow()
+
+    def call(self, worker: AgentWorker):
+        self.worker = worker
+        self.capability_worker = CapabilityWorker(self)
+        self.worker.session_tasks.create(self.run())
+```
+</CodeGroup>
+
+<Tip>
+The `register_capability` comment tag is required boilerplate—copy it exactly. The platform handles `config.json` automatically at runtime.
+</Tip>
+
+---
+
+### api-template
+
+**Type:** Skill · **Complexity:** Minimal
+
+Extends `basic-template` with an outbound HTTP request to an external REST API. Demonstrates the request/response cycle within the ability lifecycle.
+
+**Key SDK methods:** `text_to_text_response()`, `speak()`, `resume_normal_flow()`
+
+<CodeGroup>
+```python main.py
+import requests
+from src.agent.capability import MatchingCapability
+from src.main import AgentWorker
+from src.agent.capability_worker import CapabilityWorker
+
+API_URL = "https://api.example.com/data"
+API_HEADERS = {
+    "Authorization": "Bearer YOUR_API_KEY_HERE",
+    "Content-Type": "application/json",
+}
+
+class ApiTemplateCapability(MatchingCapability):
+    worker: AgentWorker = None
+    capability_worker: CapabilityWorker = None
+
+    #{{register capability}}
+
+    async def fetch_data(self, query: str) -> str | None:
+        try:
+            response = requests.get(
+                API_URL,
+                headers=API_HEADERS,
+                params={"q": query},
+            )
+            if response.status_code == 200:
+                data = response.json()
+                return str(data)
+            else:
+                self.worker.editor_logging_handler.error(
+                    f"API returned {response.status_code}"
+                )
+                return None
+        except Exception as e:
+            self.worker.editor_logging_handler.error(f"Error: {e}")
+            return None
+
+    async def run(self):
+        await self.capability_worker.speak("What would you like me to look up?")
+        user_input = await self.capability_worker.user_response()
+        
+        await self.capability_worker.speak("Let me check on that.")
+        result = await self.fetch_data(user_input)
+        
+        if result:
+            response = self.capability_worker.text_to_text_response(
+                f"Summarize this data in one short sentence: {result}"
+            )
+            await self.capability_worker.speak(response)
+        else:
+            await self.capability_worker.speak(
+                "Sorry, I couldn't get that information right now."
+            )
+        
+        self.capability_worker.resume_normal_flow()
+
+    def call(self, worker: AgentWorker):
+        self.worker = worker
+        self.capability_worker = CapabilityWorker(self)
+        self.worker.session_tasks.create(self.run())
+```
+</CodeGroup>
+
+---
+
+### loop-template
+
+**Type:** Skill (long-running) · **Complexity:** Medium
+
+Interactive back-and-forth conversation until the user says an exit word.
+
+**Key SDK methods:** `speak()`, `user_response()`, `resume_normal_flow()`
+
+<CodeGroup>
+```python main.py
+from src.agent.capability import MatchingCapability
+from src.main import AgentWorker
+from src.agent.capability_worker import CapabilityWorker
+
+EXIT_WORDS = {"stop", "exit", "quit", "done", "cancel", "bye", "goodbye"}
+
+class LoopTemplateCapability(MatchingCapability):
+    worker: AgentWorker = None
+    capability_worker: CapabilityWorker = None
+
+    #{{register capability}}
+
+    async def run(self):
+        await self.capability_worker.speak(
+            "I'm ready to help. Ask me anything, or say stop when you're done."
+        )
+        
+        while True:
+            user_input = await self.capability_worker.user_response()
+            
+            if not user_input:
+                continue
+            
+            # Check for exit commands
+            if any(word in user_input.lower() for word in EXIT_WORDS):
+                await self.capability_worker.speak("Goodbye!")
+                break
+            
+            # Process input
+            response = self.capability_worker.text_to_text_response(
+                f"Respond in one short sentence: {user_input}"
+            )
+            await self.capability_worker.speak(response)
+        
+        # ALWAYS resume normal flow when the loop ends
+        self.capability_worker.resume_normal_flow()
+
+    def call(self, worker: AgentWorker):
+        self.worker = worker
+        self.capability_worker = CapabilityWorker(self)
+        self.worker.session_tasks.create(self.run())
+```
+</CodeGroup>
+
+---
+
+## Core Templates
+
+### SendEmail
+
+**Type:** Skill · **Pattern:** Fire-and-forget · **Complexity:** Minimal
+
+When triggered by a hotword, sends an email via SMTP. No conversation, no user input—just trigger → send → speak result → exit.
+
+**Key SDK methods:** `send_email()`, `speak()`, `resume_normal_flow()`
+
+<CodeGroup>
+```python main.py
+from src.agent.capability import MatchingCapability
+from src.main import AgentWorker
+from src.agent.capability_worker import CapabilityWorker
+
+class SendemailhCapability(MatchingCapability):
+    worker: AgentWorker = None
+    capability_worker: CapabilityWorker = None
+    
+    #{{register capability}}
+
+    async def email_sender(self):
+        # Hardcoded config
+        HOST = "smtp.gmail.com"
+        PORT = 465
+        SENDER_EMAIL = "test@gmail.com"
+        SENDER_PASSWORD = "test 1234 5678 9121"  # Gmail app password
+        RECEIVER_EMAIL = "receiver_test@gmail.com"
+        SUBJECT = "Test Email"
+        BODY = "Hello! This is a test email."
+        ATTACHMENTS = ["testfile.txt"]
+        
+        status = self.capability_worker.send_email(
+            host=HOST,
+            port=PORT,
+            sender_email=SENDER_EMAIL,
+            sender_password=SENDER_PASSWORD,
+            receiver_email=RECEIVER_EMAIL,
+            cc_emails=[],
+            subject=SUBJECT,
+            body=BODY,
+            attachment_paths=ATTACHMENTS,
+        )
+        
+        if status:
+            await self.capability_worker.speak("Email has been sent successfully.")
+        else:
+            await self.capability_worker.speak("Failed to send email")
+        
+        self.capability_worker.resume_normal_flow()
+
+    def call(self, worker: AgentWorker):
+        self.worker = worker
+        self.capability_worker = CapabilityWorker(self.worker)
+        self.worker.session_tasks.create(self.email_sender())
+```
+</CodeGroup>
+
+<Warning>
+**Critical pattern — `resume_normal_flow()`:**
+
+Every Skill **must** call this when done. It hands control back to the agent's normal conversation. Forget it, and the speaker goes permanently silent.
+</Warning>
+
+---
+
+### OpenHome-local
+
+**Type:** Skill · **Pattern:** LLM-as-translator · **Complexity:** Medium
+
+You say "list all my Python files" and the speaker translates that into a real terminal command, runs it on your local machine, and reads back the result.
+
+**Key SDK methods:** `wait_for_complete_transcription()`, `text_to_text_response()`, `exec_local_command()`
+
+<Tip>
+Abilities run in OpenHome's cloud sandbox, not on your local machine. `exec_local_command()` bridges that gap via WebSocket to whatever device is connected.
+</Tip>
+
+---
+
+### openclaw-template
+
+**Type:** Skill · **Pattern:** Sandbox escape · **Complexity:** Minimal
+
+Forwards the user's raw speech directly to OpenClaw—a desktop AI agent with 2,800+ community skills.
+
+**Key SDK methods:** `wait_for_complete_transcription()`, `exec_local_command()`, `speak()`
+
+<CodeGroup>
+```python main.py
+from src.agent.capability import MatchingCapability
+from src.main import AgentWorker
+from src.agent.capability_worker import CapabilityWorker
+
+class OpentestCapability(MatchingCapability):
+    worker: AgentWorker = None
+    capability_worker: CapabilityWorker = None
+    
+    #{{register capability}}
+
+    async def first_function(self):
+        user_inquiry = await self.capability_worker.wait_for_complete_transcription()
+        
+        await self.capability_worker.speak("Sending Inquiry to OpenClaw")
+        response = await self.capability_worker.exec_local_command(user_inquiry)
+        
+        self.worker.editor_logging_handler.info(response)
+        await self.capability_worker.speak(response["data"])
+        
+        self.capability_worker.resume_normal_flow()
+
+    def call(self, worker: AgentWorker):
+        self.worker = worker
+        self.capability_worker = CapabilityWorker(self)
+        self.worker.session_tasks.create(self.first_function())
+```
+</CodeGroup>
+
+<Note>
+OpenHome abilities run in a restricted cloud sandbox—no arbitrary Python packages, no local network calls. OpenClaw is the escape hatch.
+</Note>
+
+---
+
+## Background Daemon Templates
+
+### Watcher
+
+**Type:** Background Daemon · **Pattern:** Poll loop · **Complexity:** Medium
+
+Starts automatically when a user connects and runs in an infinite loop. This example reads conversation history and logs it every 20 seconds.
+
+**Key SDK methods:** `get_full_message_history()`, `session_tasks.sleep()`
+
+<CodeGroup>
+```python watcher.py
+from src.agent.capability import MatchingCapability
+from src.main import AgentWorker
+from src.agent.capability_worker import CapabilityWorker
+from time import time
+
+class WatcherCapabilityWatcher(MatchingCapability):
+    worker: AgentWorker = None
+    capability_worker: CapabilityWorker = None
+    background_daemon_mode: bool = False
+    
+    #{{register capability}}
+
+    async def first_function(self):
+        self.worker.editor_logging_handler.info("%s: Watcher Called" % time())
+        
+        while True:
+            self.worker.editor_logging_handler.info("%s: watcher watching" % time())
+            
+            message_history = self.capability_worker.get_full_message_history()[-10:]
+            for message in message_history:
+                self.worker.editor_logging_handler.info(
+                    "Role: %s, Message: %s" % (
+                        message.get("role", ""),
+                        message.get("content", "")
+                    )
+                )
+            
+            await self.worker.session_tasks.sleep(20.0)
+
+    def call(self, worker: AgentWorker, background_daemon_mode: bool):
+        self.worker = worker
+        self.background_daemon_mode = background_daemon_mode
+        self.capability_worker = CapabilityWorker(self.worker)
+        self.worker.session_tasks.create(self.first_function())
+```
+</CodeGroup>
+
+<Warning>
+**Critical rules for daemons:**
+
+| Rule | Why |
+|------|-----|
+| Use `session_tasks.sleep()`, **not** `asyncio.sleep()` | Ensures proper cleanup when the session ends |
+| **No** `resume_normal_flow()` | Daemons are independent threads—they don't own the conversation |
+| Call `send_interrupt_signal()` before speaking | Prevents audio overlap; stops system from transcribing daemon output as user input |
+| `delete` then `write` for JSON | `write_file()` appends—always delete the file first |
+</Warning>
+
+---
+
+### Alarm
+
+**Type:** Skill + Daemon · **Pattern:** Coordinated · **Complexity:** Advanced
+
+`main.py` (Skill) parses "set an alarm for 3pm" and writes to `alarms.json`. `watcher.py` (Daemon) polls that file every 5 seconds and fires when the target time hits.
+
+**Key SDK methods:** `send_interrupt_signal()`, `play_from_audio_file()`, `session_tasks.sleep()`
+
+<Accordion title="View Alarm Skill (main.py)">
+```python
+from src.agent.capability import MatchingCapability
+from src.main import AgentWorker
+from src.agent.capability_worker import CapabilityWorker
+from datetime import datetime
+from zoneinfo import ZoneInfo
+import json
+
+class AlarmCapability(MatchingCapability):
+    async def first_setup(self):
+        try:
+            user_text = await self.capability_worker.wait_for_complete_transcription()
+            
+            tz_name = self.capability_worker.get_timezone()
+            tz = ZoneInfo(tz_name)
+            now = datetime.now(tz=tz)
+            
+            # Use LLM to parse time
+            system_prompt = f"""Parse the alarm time.
+            Current datetime: {now.isoformat()}
+            Return JSON: {{"target_iso": "...", "human_time": "..."}}
+            """
+            
+            llm_response = self.capability_worker.text_to_text_response(
+                user_text, [], system_prompt
+            )
+            
+            parsed = json.loads(llm_response)
+            
+            alarm = {
+                "id": f"alarm_{int(time() * 1000)}",
+                "timezone": tz_name,
+                "target_iso": parsed["target_iso"],
+                "human_time": parsed["human_time"],
+                "status": "scheduled"
+            }
+            
+            # Write alarm to file
+            alarms = await self._read_alarms()
+            alarms.append(alarm)
+            await self._write_alarms(alarms)
+            
+            await self.capability_worker.speak(f"Alarm set for {alarm['human_time']}.")
+        finally:
+            self.capability_worker.resume_normal_flow()
+```
+</Accordion>
+
+<Accordion title="View Alarm Daemon (watcher.py)">
+```python
+from datetime import datetime
+from zoneinfo import ZoneInfo
+import json
+
+class AlarmCapabilityWatcher(MatchingCapability):
+    async def first_function(self):
+        while True:
+            try:
+                alarms = await self._read_alarms_safe()
+                if not alarms:
+                    await self.worker.session_tasks.sleep(5.0)
+                    continue
+                
+                tz_name = self.capability_worker.get_timezone()
+                tz = ZoneInfo(tz_name)
+                now = datetime.now(tz=tz)
+                
+                # Find due alarms
+                due = []
+                for a in alarms:
+                    if a.get("status") != "scheduled":
+                        continue
+                    target_dt = datetime.fromisoformat(a.get("target_iso"))
+                    if now >= target_dt:
+                        due.append(a)
+                
+                # Fire alarms
+                for a in due:
+                    await self.capability_worker.play_from_audio_file("alarm.mp3")
+                    await self._mark_alarm_triggered(alarms, a.get("id"))
+                
+                await self.worker.session_tasks.sleep(5.0)
+            except Exception as e:
+                self.worker.editor_logging_handler.error(f"Watcher error: {e}")
+                await self.worker.session_tasks.sleep(2.0)
+```
+</Accordion>
+
+---
+
+## Template Comparison
+
+| Template | Type | Use Case | Key Methods |
+|----------|------|----------|-------------|
+| `basic-template` | Skill | Simple Q&A | `speak()`, `user_response()` |
+| `api-template` | Skill | External API calls | `text_to_text_response()`, requests |
+| `loop-template` | Skill | Multi-turn conversation | while loop + exit detection |
+| `SendEmail` | Skill | Fire-and-forget actions | `send_email()` |
+| `OpenHome-local` | Skill | Local machine control | `exec_local_command()` |
+| `openclaw-template` | Skill | Desktop agent integration | `exec_local_command()` |
+| `Watcher` | Daemon | Background monitoring | `get_full_message_history()` |
+| `Alarm` | Skill + Daemon | Timed events | File IPC, `play_from_audio_file()` |
+
+---
+
+## Quick Start
+
+<Steps>
+  <Step title="Pick a template">
+    Start with `basic-template` if you're new, or whichever pattern matches what you want to build.
+  </Step>
+  
+  <Step title="Copy and rename">
+    Copy the template folder and rename it to your ability name.
+  </Step>
+  
+  <Step title="Replace hardcoded values">
+    Replace API keys, emails, URLs with user-collected input or environment config.
+  </Step>
+  
+  <Step title="Add guardrails">
+    Add error handling, confirmation steps, and safety checks appropriate for your use case.
+  </Step>
+  
+  <Step title="Test and deploy">
+    Zip your ability, upload to OpenHome, and test in the Live Editor.
+  </Step>
+</Steps>
+
+---
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Common Patterns" icon="code" href="/building/patterns">
+    Reusable code patterns for common tasks
+  </Card>
+  <Card title="Testing Guide" icon="flask" href="/building/testing">
+    Learn how to test your abilities
+  </Card>
+  <Card title="Best Practices" icon="star" href="/building/best-practices">
+    Voice UX and development best practices
+  </Card>
+  <Card title="SDK Reference" icon="book" href="/api/capability-worker">
+    Complete CapabilityWorker API documentation
+  </Card>
+</CardGroup>

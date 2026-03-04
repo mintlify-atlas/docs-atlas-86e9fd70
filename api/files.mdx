@@ -1,0 +1,595 @@
+---
+title: 'File Storage'
+description: 'Persistent and temporary file storage for user data'
+icon: 'folder'
+---
+
+## Overview
+
+OpenHome provides a **server-side file storage system** for persisting data across sessions. Files are stored per-user and can be accessed by any Ability.
+
+<Note>
+Storage is **user-level, not per-ability**. Any Ability can read/write files for a given user, enabling cross-ability data sharing.
+</Note>
+
+---
+
+## Storage Modes
+
+| Mode | Scope | Persistence | Use Case |
+|------|-------|-------------|----------|
+| `temp=False` | **User-level, global** | Survives disconnects and new sessions forever | Preferences, history, onboarding state |
+| `temp=True` | **Session-level** | Deleted when session ends | Scratch data, cached API responses |
+
+### Allowed File Types
+
+`.txt`, `.csv`, `.json`, `.md`, `.log`, `.yaml`, `.yml`
+
+---
+
+## Methods
+
+### check_if_file_exists()
+
+Checks if a file exists in storage.
+
+```python
+await self.capability_worker.check_if_file_exists(
+    filename: str,
+    temp: bool
+) -> bool
+```
+
+<ParamField path="filename" type="string" required>
+  Name of the file to check
+</ParamField>
+
+<ParamField path="temp" type="boolean" required>
+  `False` for persistent storage, `True` for session-only
+</ParamField>
+
+<ResponseField name="exists" type="boolean">
+  `True` if file exists, `False` otherwise
+</ResponseField>
+
+#### Examples
+
+<CodeGroup>
+
+```python Basic Check
+if await self.capability_worker.check_if_file_exists("user_prefs.json", False):
+    # File exists, read it
+    data = await self.capability_worker.read_file("user_prefs.json", False)
+else:
+    # First run, create defaults
+    defaults = {"theme": "dark", "notifications": True}
+    await self.capability_worker.write_file(
+        "user_prefs.json",
+        json.dumps(defaults),
+        False
+    )
+```
+
+```python Onboarding Detection
+ONBOARDED_FILE = "onboarded.txt"
+
+if await self.capability_worker.check_if_file_exists(ONBOARDED_FILE, False):
+    await self.capability_worker.speak("Welcome back!")
+else:
+    await self.run_onboarding()
+    await self.capability_worker.write_file(ONBOARDED_FILE, "true", False)
+```
+
+</CodeGroup>
+
+---
+
+### write_file()
+
+Writes content to a file. **APPENDS to existing files.**
+
+```python
+await self.capability_worker.write_file(
+    filename: str,
+    content: str,
+    temp: bool
+) -> None
+```
+
+<ParamField path="filename" type="string" required>
+  Name of the file to write
+</ParamField>
+
+<ParamField path="content" type="string" required>
+  Content to write (string only)
+</ParamField>
+
+<ParamField path="temp" type="boolean" required>
+  `False` for persistent, `True` for session-only
+</ParamField>
+
+<Warning>
+**Critical: `write_file()` APPENDS to existing files.**
+
+For JSON files, always DELETE before writing to avoid corruption. See [JSON Pattern](#json-pattern) below.
+</Warning>
+
+#### Examples
+
+<CodeGroup>
+
+```python Create New File
+await self.capability_worker.write_file(
+    "settings.json",
+    json.dumps({"volume": 50, "language": "en"}),
+    False
+)
+```
+
+```python Append to Log
+from time import time
+
+event = f"\n{time()}: User logged in"
+await self.capability_worker.write_file("activity.log", event, False)
+```
+
+```python Session Cache
+import json
+
+cache_data = {"query": "weather", "result": "sunny"}
+await self.capability_worker.write_file(
+    "cache.json",
+    json.dumps(cache_data),
+    True  # Session-only
+)
+```
+
+</CodeGroup>
+
+---
+
+### read_file()
+
+Reads the full contents of a file.
+
+```python
+await self.capability_worker.read_file(
+    filename: str,
+    temp: bool
+) -> str
+```
+
+<ParamField path="filename" type="string" required>
+  Name of the file to read
+</ParamField>
+
+<ParamField path="temp" type="boolean" required>
+  `False` for persistent, `True` for session-only
+</ParamField>
+
+<ResponseField name="content" type="string">
+  Full file contents as a string
+</ResponseField>
+
+#### Examples
+
+<CodeGroup>
+
+```python Read JSON
+if await self.capability_worker.check_if_file_exists("prefs.json", False):
+    raw = await self.capability_worker.read_file("prefs.json", False)
+    prefs = json.loads(raw)
+    
+    theme = prefs.get("theme", "light")
+    self.worker.editor_logging_handler.info(f"User theme: {theme}")
+```
+
+```python Read Log
+if await self.capability_worker.check_if_file_exists("activity.log", False):
+    log_data = await self.capability_worker.read_file("activity.log", False)
+    
+    lines = log_data.strip().split("\n")
+    self.worker.editor_logging_handler.info(f"Total events: {len(lines)}")
+```
+
+```python Error Handling
+try:
+    raw = await self.capability_worker.read_file("data.json", False)
+    data = json.loads(raw)
+except json.JSONDecodeError:
+    self.worker.editor_logging_handler.error("Corrupt JSON file")
+    data = {}  # Fallback to empty
+```
+
+</CodeGroup>
+
+---
+
+### delete_file()
+
+Deletes a file from storage.
+
+```python
+await self.capability_worker.delete_file(
+    filename: str,
+    temp: bool
+) -> None
+```
+
+<ParamField path="filename" type="string" required>
+  Name of the file to delete
+</ParamField>
+
+<ParamField path="temp" type="boolean" required>
+  `False` for persistent, `True` for session-only
+</ParamField>
+
+#### Examples
+
+<CodeGroup>
+
+```python Delete Before Writing
+if await self.capability_worker.check_if_file_exists("prefs.json", False):
+    await self.capability_worker.delete_file("prefs.json", False)
+
+await self.capability_worker.write_file(
+    "prefs.json",
+    json.dumps(new_prefs),
+    False
+)
+```
+
+```python Clear Cache
+if await self.capability_worker.check_if_file_exists("cache.json", True):
+    await self.capability_worker.delete_file("cache.json", True)
+```
+
+```python Reset User Data
+confirmed = await self.capability_worker.run_confirmation_loop(
+    "This will delete all your data. Are you sure?"
+)
+
+if confirmed:
+    await self.capability_worker.delete_file("user_prefs.json", False)
+    await self.capability_worker.delete_file("history.log", False)
+    await self.capability_worker.speak("All data deleted.")
+```
+
+</CodeGroup>
+
+---
+
+## JSON Pattern
+
+<Warning>
+**Critical: `write_file()` appends to existing files.**
+
+Writing JSON to an existing file produces invalid JSON:
+```
+{"a":1}{"a":1,"b":2}  ← BROKEN
+```
+
+Always **delete before writing** JSON files.
+</Warning>
+
+### Safe JSON Write Pattern
+
+```python
+async def save_json(self, filename: str, data: dict):
+    """Safely write JSON by deleting old file first."""
+    
+    # Delete existing file
+    if await self.capability_worker.check_if_file_exists(filename, False):
+        await self.capability_worker.delete_file(filename, False)
+    
+    # Write new data
+    await self.capability_worker.write_file(
+        filename,
+        json.dumps(data),
+        False
+    )
+
+async def load_json(self, filename: str) -> dict:
+    """Load JSON with error handling."""
+    
+    if not await self.capability_worker.check_if_file_exists(filename, False):
+        return {}  # Return empty dict if file doesn't exist
+    
+    try:
+        raw = await self.capability_worker.read_file(filename, False)
+        return json.loads(raw)
+    except json.JSONDecodeError:
+        self.worker.editor_logging_handler.error(f"Corrupt JSON: {filename}")
+        return {}  # Return empty dict on error
+```
+
+### Usage
+
+```python
+# Load preferences
+prefs = await self.load_json("user_prefs.json")
+
+# Modify
+prefs["theme"] = "dark"
+prefs["notifications"] = True
+
+# Save (automatically deletes old file)
+await self.save_json("user_prefs.json", prefs)
+```
+
+---
+
+## Common Patterns
+
+### Persistent User Preferences
+
+```python
+PREFS_FILE = "user_prefs.json"
+
+class MyAbility(MatchingCapability):
+    async def load_or_create_prefs(self) -> dict:
+        """Load preferences or create defaults on first run."""
+        
+        if await self.capability_worker.check_if_file_exists(PREFS_FILE, False):
+            raw = await self.capability_worker.read_file(PREFS_FILE, False)
+            try:
+                return json.loads(raw)
+            except json.JSONDecodeError:
+                self.worker.editor_logging_handler.error("Corrupt prefs, resetting")
+                await self.capability_worker.delete_file(PREFS_FILE, False)
+        
+        # Create defaults
+        return {"theme": "light", "volume": 50}
+    
+    async def save_prefs(self, prefs: dict):
+        """Save preferences persistently."""
+        
+        if await self.capability_worker.check_if_file_exists(PREFS_FILE, False):
+            await self.capability_worker.delete_file(PREFS_FILE, False)
+        
+        await self.capability_worker.write_file(
+            PREFS_FILE,
+            json.dumps(prefs),
+            False
+        )
+    
+    async def run(self):
+        prefs = await self.load_or_create_prefs()
+        
+        # Use preferences
+        theme = prefs.get("theme", "light")
+        await self.capability_worker.speak(f"Your theme is {theme}.")
+        
+        self.capability_worker.resume_normal_flow()
+```
+
+---
+
+### First-Run Detection
+
+```python
+ONBOARDED_FILE = "onboarded.txt"
+
+async def run(self):
+    if await self.capability_worker.check_if_file_exists(ONBOARDED_FILE, False):
+        # Returning user
+        await self.capability_worker.speak("Welcome back!")
+        await self.run_main_flow()
+    else:
+        # First-time user
+        await self.capability_worker.speak("Welcome! Let's get you set up.")
+        await self.run_onboarding()
+        
+        # Mark as onboarded
+        await self.capability_worker.write_file(ONBOARDED_FILE, "true", False)
+        
+        await self.run_main_flow()
+    
+    self.capability_worker.resume_normal_flow()
+```
+
+---
+
+### Activity Logging (Append-Friendly)
+
+For `.txt` and `.log` files, appending works perfectly:
+
+```python
+from time import time
+
+async def log_activity(self, event: str):
+    """Append timestamped event to persistent log."""
+    
+    entry = f"\n{time()}: {event}"
+    await self.capability_worker.write_file("activity.log", entry, False)
+
+async def get_recent_activity(self) -> list:
+    """Read activity log and return as list."""
+    
+    if not await self.capability_worker.check_if_file_exists("activity.log", False):
+        return []
+    
+    log_data = await self.capability_worker.read_file("activity.log", False)
+    return log_data.strip().split("\n")
+
+# Usage
+await self.log_activity("User started quiz")
+await self.log_activity("User scored 8/10")
+
+activities = await self.get_recent_activity()
+self.worker.editor_logging_handler.info(f"Total events: {len(activities)}")
+```
+
+---
+
+### Session-Only Cache
+
+```python
+async def cache_api_response(self, key: str, data: dict):
+    """Cache data for current session only."""
+    
+    cache_file = f"cache_{key}.json"
+    
+    # Delete old cache if exists
+    if await self.capability_worker.check_if_file_exists(cache_file, True):
+        await self.capability_worker.delete_file(cache_file, True)
+    
+    # Write new cache
+    await self.capability_worker.write_file(
+        cache_file,
+        json.dumps(data),
+        True  # Session-only
+    )
+
+async def get_cached(self, key: str) -> dict | None:
+    """Read cached data from current session."""
+    
+    cache_file = f"cache_{key}.json"
+    
+    if await self.capability_worker.check_if_file_exists(cache_file, True):
+        raw = await self.capability_worker.read_file(cache_file, True)
+        try:
+            return json.loads(raw)
+        except json.JSONDecodeError:
+            return None
+    
+    return None
+
+# Usage
+cached = await self.get_cached("weather_nyc")
+if cached:
+    # Use cached data
+    weather = cached
+else:
+    # Fetch from API
+    weather = fetch_weather("New York")
+    await self.cache_api_response("weather_nyc", weather)
+```
+
+---
+
+### Cross-Ability Data Sharing
+
+Storage is user-level (not per-ability), so use consistent filenames to share data:
+
+```python
+# Onboarding Ability
+class OnboardingAbility(MatchingCapability):
+    async def run(self):
+        name = await self.capability_worker.run_io_loop("What's your name?")
+        city = await self.capability_worker.run_io_loop("What city are you in?")
+        
+        context = {"name": name, "city": city}
+        
+        # Save to shared file
+        if await self.capability_worker.check_if_file_exists("user_context.json", False):
+            await self.capability_worker.delete_file("user_context.json", False)
+        
+        await self.capability_worker.write_file(
+            "user_context.json",
+            json.dumps(context),
+            False
+        )
+        
+        await self.capability_worker.speak("Setup complete!")
+        self.capability_worker.resume_normal_flow()
+
+# Weather Ability (reads shared data)
+class WeatherAbility(MatchingCapability):
+    async def run(self):
+        # Read shared context
+        if await self.capability_worker.check_if_file_exists("user_context.json", False):
+            raw = await self.capability_worker.read_file("user_context.json", False)
+            context = json.loads(raw)
+            
+            name = context.get("name", "there")
+            city = context.get("city", "your city")
+            
+            await self.capability_worker.speak(
+                f"Hi {name}, checking weather for {city}..."
+            )
+        else:
+            await self.capability_worker.speak("Checking weather...")
+        
+        # ... fetch weather ...
+        
+        self.capability_worker.resume_normal_flow()
+```
+
+---
+
+## When to Use Which Mode
+
+### Use `temp=False` (Persistent) For:
+
+- User preferences and settings
+- Onboarding state
+- User profile data (name, location, timezone)
+- Conversation summaries
+- Accumulated data (journals, scores, history)
+- Any data that should survive a disconnect
+
+### Use `temp=True` (Session-Only) For:
+
+- Cached API responses
+- Intermediate processing data
+- Temporary scratch files
+- Data that doesn't need to survive a disconnect
+
+---
+
+## Best Practices
+
+### Always Check File Existence
+
+```python
+# ✅ Good
+if await self.capability_worker.check_if_file_exists("prefs.json", False):
+    data = await self.capability_worker.read_file("prefs.json", False)
+else:
+    data = json.dumps({"default": True})
+
+# ❌ Bad - will crash if file doesn't exist
+data = await self.capability_worker.read_file("prefs.json", False)
+```
+
+### Delete Before Writing JSON
+
+```python
+# ✅ Good
+if await self.capability_worker.check_if_file_exists("data.json", False):
+    await self.capability_worker.delete_file("data.json", False)
+await self.capability_worker.write_file("data.json", json.dumps(data), False)
+
+# ❌ Bad - will corrupt JSON
+await self.capability_worker.write_file("data.json", json.dumps(data), False)
+```
+
+### Handle JSON Parsing Errors
+
+```python
+# ✅ Good
+try:
+    raw = await self.capability_worker.read_file("prefs.json", False)
+    prefs = json.loads(raw)
+except json.JSONDecodeError:
+    self.worker.editor_logging_handler.error("Corrupt JSON")
+    prefs = {}  # Fallback
+
+# ❌ Bad
+raw = await self.capability_worker.read_file("prefs.json", False)
+prefs = json.loads(raw)  # Crashes on corrupt JSON
+```
+
+---
+
+## Related Methods
+
+<CardGroup cols={2}>
+  <Card title="Flow Control" icon="traffic-light" href="/api/flow-control">
+    Use AgentWorker logging for file operations
+  </Card>
+  <Card title="Audio" icon="music" href="/api/audio">
+    Store recorded audio with file storage
+  </Card>
+</CardGroup>

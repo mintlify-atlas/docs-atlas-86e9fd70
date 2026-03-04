@@ -1,0 +1,493 @@
+---
+title: 'LLM & Text Generation'
+description: 'Generate text responses using the configured LLM'
+icon: 'brain'
+---
+
+## Overview
+
+The `text_to_text_response()` method generates text using the Agent's configured LLM (Language Model). Use it for:
+
+- Generating conversational responses
+- Processing user input with AI
+- Classification and intent detection
+- Summarization and content generation
+- JSON extraction from unstructured text
+
+<Warning>
+**This is the ONLY synchronous method in CapabilityWorker.**
+
+Do NOT use `await` with `text_to_text_response()`.
+</Warning>
+
+---
+
+## text_to_text_response()
+
+Generates a text response using the configured LLM.
+
+### Signature
+
+```python
+self.capability_worker.text_to_text_response(
+    prompt_text: str,
+    history: list = [],
+    system_prompt: str = ""
+) -> str
+```
+
+<ParamField path="prompt_text" type="string" required>
+  The current prompt or user input to send to the LLM
+</ParamField>
+
+<ParamField path="history" type="list" default="[]">
+  Conversation history for multi-turn context. Each item is a dict with `role` ("user" or "assistant") and `content` (string).
+  
+  Example:
+  ```python
+  [
+      {"role": "user", "content": "Tell me about dogs"},
+      {"role": "assistant", "content": "Dogs are loyal companions..."}
+  ]
+  ```
+</ParamField>
+
+<ParamField path="system_prompt" type="string" default="">
+  System-level instructions to control LLM behavior. Sets the personality, constraints, and output format.
+  
+  Example:
+  ```python
+  "You are a professional chef. Keep responses under 2 sentences."
+  ```
+</ParamField>
+
+### Returns
+
+<ResponseField name="response" type="string">
+  The generated text from the LLM
+</ResponseField>
+
+---
+
+## Examples
+
+### Basic Usage
+
+<CodeGroup>
+
+```python Simple Question
+response = self.capability_worker.text_to_text_response(
+    "What's the capital of France?"
+)
+
+await self.capability_worker.speak(response)
+```
+
+```python With User Input
+user_input = await self.capability_worker.user_response()
+
+response = self.capability_worker.text_to_text_response(
+    f"Give a helpful response to: {user_input}"
+)
+
+await self.capability_worker.speak(response)
+```
+
+```python Logging
+self.worker.editor_logging_handler.info("Calling LLM...")
+
+response = self.capability_worker.text_to_text_response(
+    "Explain quantum computing in one sentence."
+)
+
+self.worker.editor_logging_handler.info(f"LLM returned: {response}")
+```
+
+</CodeGroup>
+
+---
+
+### Conversation History
+
+Maintain multi-turn context by passing conversation history:
+
+<CodeGroup>
+
+```python Multi-Turn Conversation
+self.history = []
+
+async def chat_loop(self):
+    system = "You are a helpful assistant. Keep answers under 2 sentences."
+    
+    while True:
+        user_input = await self.capability_worker.user_response()
+        
+        if "exit" in user_input.lower():
+            break
+        
+        # Add user message to history
+        self.history.append({"role": "user", "content": user_input})
+        
+        # Generate response with full history
+        response = self.capability_worker.text_to_text_response(
+            user_input,
+            history=self.history,
+            system_prompt=system
+        )
+        
+        # Add assistant response to history
+        self.history.append({"role": "assistant", "content": response})
+        
+        await self.capability_worker.speak(response)
+    
+    self.capability_worker.resume_normal_flow()
+```
+
+```python Context-Aware Follow-up
+history = [
+    {"role": "user", "content": "Tell me about dogs"},
+    {"role": "assistant", "content": "Dogs are loyal companions..."}
+]
+
+# Follow-up question uses context
+response = self.capability_worker.text_to_text_response(
+    "What breeds are best for apartments?",
+    history=history
+)
+
+await self.capability_worker.speak(response)
+```
+
+</CodeGroup>
+
+---
+
+### System Prompts
+
+Control LLM behavior with system prompts:
+
+<CodeGroup>
+
+```python Personality
+system = "You are a pirate captain. Speak like a pirate in all responses."
+
+response = self.capability_worker.text_to_text_response(
+    "What's the weather today?",
+    system_prompt=system
+)
+
+# Result: "Arr, the skies be clear and the winds fair, matey!"
+```
+
+```python Output Format
+system = "You are a JSON generator. ONLY return valid JSON, no explanations."
+
+response = self.capability_worker.text_to_text_response(
+    "Extract name and email from: John Doe, john@example.com",
+    system_prompt=system
+)
+
+# Result: {"name": "John Doe", "email": "john@example.com"}
+```
+
+```python Constraints
+system = "You are a helpful assistant. Rules: Keep answers under 1 sentence. Never use technical jargon."
+
+response = self.capability_worker.text_to_text_response(
+    "Explain machine learning",
+    system_prompt=system
+)
+
+# Result: "Machine learning teaches computers to learn from examples."
+```
+
+```python Domain Expert
+system = (
+    "You are a professional Italian chef with 20 years of experience. "
+    "Give authentic cooking advice. Keep responses under 2 sentences."
+)
+
+response = self.capability_worker.text_to_text_response(
+    "How do I make perfect pasta?",
+    system_prompt=system
+)
+```
+
+</CodeGroup>
+
+---
+
+## Advanced Patterns
+
+### Intent Classification
+
+Use the LLM to classify user intent:
+
+```python
+def classify_intent(self, user_input: str) -> dict:
+    """Classify user input into categories."""
+    
+    prompt = (
+        "Classify this user input. Return ONLY valid JSON.\n"
+        '{"intent": "weather|timer|music|chat", "confidence": 0.0-1.0}\n\n'
+        f"User: {user_input}"
+    )
+    
+    raw = self.capability_worker.text_to_text_response(prompt)
+    
+    # Strip markdown code fences
+    clean = raw.replace("```json", "").replace("```", "").strip()
+    
+    try:
+        return json.loads(clean)
+    except json.JSONDecodeError:
+        self.worker.editor_logging_handler.error(f"Invalid JSON: {raw}")
+        return {"intent": "unknown", "confidence": 0.0}
+
+# Usage
+user_input = await self.capability_worker.user_response()
+result = self.classify_intent(user_input)
+
+if result["intent"] == "weather" and result["confidence"] > 0.7:
+    # Handle weather request
+    pass
+```
+
+### JSON Extraction
+
+Extract structured data from unstructured text:
+
+```python
+def extract_contact_info(self, text: str) -> dict:
+    """Extract name and email from natural language."""
+    
+    system = "You extract contact info. Return ONLY valid JSON with 'name' and 'email' keys."
+    
+    prompt = f"Extract contact information from: {text}"
+    
+    raw = self.capability_worker.text_to_text_response(
+        prompt,
+        system_prompt=system
+    )
+    
+    # Strip markdown fences (LLMs often wrap JSON in ```json ... ```)
+    clean = raw.replace("```json", "").replace("```", "").strip()
+    
+    try:
+        return json.loads(clean)
+    except json.JSONDecodeError:
+        return {"name": None, "email": None}
+
+# Usage
+user_input = "I'm John Doe and my email is john@example.com"
+info = self.extract_contact_info(user_input)
+
+self.worker.editor_logging_handler.info(f"Name: {info['name']}, Email: {info['email']}")
+```
+
+### Summarization
+
+```python
+async def summarize_conversation(self):
+    """Summarize the current conversation history."""
+    
+    # Get full message history from Agent
+    history = self.capability_worker.get_full_message_history()
+    
+    # Convert to text
+    conversation_text = "\n".join(
+        [f"{msg['role']}: {msg['content']}" for msg in history]
+    )
+    
+    # Summarize
+    summary = self.capability_worker.text_to_text_response(
+        f"Summarize this conversation in 2-3 sentences:\n\n{conversation_text}"
+    )
+    
+    await self.capability_worker.speak(f"Here's a summary: {summary}")
+```
+
+### Translation
+
+```python
+def translate(self, text: str, target_language: str) -> str:
+    """Translate text to target language."""
+    
+    system = f"You are a translator. Translate all input to {target_language}. Return ONLY the translation."
+    
+    return self.capability_worker.text_to_text_response(
+        text,
+        system_prompt=system
+    )
+
+# Usage
+spanish = self.translate("Hello, how are you?", "Spanish")
+await self.capability_worker.speak(spanish)
+```
+
+---
+
+## Best Practices
+
+### Strip Markdown Code Fences
+
+LLMs often wrap JSON in markdown code blocks. Always strip them:
+
+```python
+# ✅ Good
+raw = self.capability_worker.text_to_text_response(prompt)
+clean = raw.replace("```json", "").replace("```", "").strip()
+data = json.loads(clean)
+
+# ❌ Bad
+raw = self.capability_worker.text_to_text_response(prompt)
+data = json.loads(raw)  # Will fail if wrapped in ```json ... ```
+```
+
+### Be Specific in Prompts
+
+```python
+# ✅ Good
+prompt = "Give a 1-sentence summary of: {text}"
+
+# ❌ Vague
+prompt = "Summarize this: {text}"
+```
+
+### Use System Prompts for Constraints
+
+```python
+# ✅ Good
+system = "Keep all responses under 2 sentences. Never use technical jargon."
+response = self.capability_worker.text_to_text_response(query, system_prompt=system)
+
+# ❌ Bad - constraints in every prompt
+prompt = f"{query}. Keep response under 2 sentences and avoid jargon."
+```
+
+### Handle JSON Parsing Errors
+
+```python
+# ✅ Good
+try:
+    data = json.loads(clean_response)
+except json.JSONDecodeError:
+    self.worker.editor_logging_handler.error(f"Invalid JSON: {raw_response}")
+    data = {}  # Fallback
+
+# ❌ Bad
+data = json.loads(clean_response)  # Crashes on invalid JSON
+```
+
+---
+
+## Common Pitfalls
+
+### Using `await` (Wrong!)
+
+<CodeGroup>
+
+```python Correct ✅
+response = self.capability_worker.text_to_text_response("Hello")
+```
+
+```python Wrong ❌
+response = await self.capability_worker.text_to_text_response("Hello")
+# SyntaxError: object str can't be used in 'await' expression
+```
+
+</CodeGroup>
+
+### Ignoring Markdown Fences
+
+```python
+# ❌ Will fail
+response = self.capability_worker.text_to_text_response(
+    "Return JSON with name and age"
+)
+data = json.loads(response)  # Crashes if response is ```json\n{...}\n```
+
+# ✅ Correct
+response = self.capability_worker.text_to_text_response(
+    "Return JSON with name and age"
+)
+clean = response.replace("```json", "").replace("```", "").strip()
+data = json.loads(clean)
+```
+
+### Not Maintaining History
+
+```python
+# ❌ No context between turns
+while True:
+    user_input = await self.capability_worker.user_response()
+    response = self.capability_worker.text_to_text_response(user_input)
+    await self.capability_worker.speak(response)
+
+# ✅ Maintains context
+history = []
+while True:
+    user_input = await self.capability_worker.user_response()
+    history.append({"role": "user", "content": user_input})
+    
+    response = self.capability_worker.text_to_text_response(
+        user_input, 
+        history=history
+    )
+    
+    history.append({"role": "assistant", "content": response})
+    await self.capability_worker.speak(response)
+```
+
+---
+
+## Performance Tips
+
+### Keep Prompts Concise
+
+```python
+# ✅ Good
+prompt = f"Respond to: {user_input}"
+
+# ❌ Unnecessarily verbose
+prompt = (
+    "The user has provided the following input and would like "
+    "you to generate a helpful, friendly, and concise response "
+    f"to their query which is: {user_input}"
+)
+```
+
+### Reuse System Prompts
+
+```python
+# ✅ Good - define once
+class MyAbility(MatchingCapability):
+    SYSTEM_PROMPT = "You are a helpful assistant. Keep answers under 2 sentences."
+    
+    def generate_response(self, user_input: str) -> str:
+        return self.capability_worker.text_to_text_response(
+            user_input,
+            system_prompt=self.SYSTEM_PROMPT
+        )
+
+# ❌ Bad - redefine every time
+def generate_response(self, user_input: str) -> str:
+    system = "You are a helpful assistant. Keep answers under 2 sentences."
+    return self.capability_worker.text_to_text_response(
+        user_input,
+        system_prompt=system
+    )
+```
+
+---
+
+## Related Methods
+
+<CardGroup cols={2}>
+  <Card title="Listening" icon="microphone" href="/api/listening">
+    Get user input with user_response()
+  </Card>
+  <Card title="Speaking" icon="volume" href="/api/speaking">
+    Speak LLM responses with speak()
+  </Card>
+</CardGroup>

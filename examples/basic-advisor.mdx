@@ -1,0 +1,200 @@
+---
+title: 'Basic Advisor'
+description: 'Simple daily life advice powered by LLM reasoning'
+icon: 'lightbulb'
+---
+
+## What It Does
+
+A simple daily life advisor that listens to your problem, generates helpful advice using the LLM, and collects your feedback. Perfect for quick guidance on everyday challenges.
+
+## Suggested Trigger Words
+
+- "give me advice"
+- "help me out"
+- "I need advice"
+- "daily advisor"
+
+## Key Features
+
+<CardGroup cols={2}>
+  <Card title="Simple Flow" icon="arrow-right">
+    Straightforward interaction: problem → advice → feedback
+  </Card>
+  <Card title="LLM-Powered" icon="brain">
+    Generates contextual advice using AI reasoning
+  </Card>
+  <Card title="No Setup" icon="check">
+    Works immediately with no configuration or API keys
+  </Card>
+  <Card title="Quick Solutions" icon="bolt">
+    Returns concise 1-2 sentence actionable advice
+  </Card>
+</CardGroup>
+
+## How It Works
+
+<Steps>
+  <Step title="User Activation">
+    User triggers the ability with a hotword like "give me advice"
+  </Step>
+  <Step title="Problem Collection">
+    Advisor introduces itself and asks for the user's problem
+  </Step>
+  <Step title="LLM Processing">
+    Problem is sent to the LLM with instructions to generate helpful, concise advice
+  </Step>
+  <Step title="Solution Delivery">
+    Advisor speaks the solution and asks for feedback
+  </Step>
+  <Step title="Graceful Exit">
+    Thanks the user and returns control to the main agent
+  </Step>
+</Steps>
+
+## API Requirements
+
+<Note>
+  **No external APIs required.** Uses only the built-in LLM.
+</Note>
+
+## Code Walkthrough
+
+### Capability Registration
+
+The ability follows the standard OpenHome pattern:
+
+```python
+class BasicAdvisorCapability(MatchingCapability):
+    worker: AgentWorker = None
+    capability_worker: CapabilityWorker = None
+
+    @classmethod
+    def register_capability(cls) -> "MatchingCapability":
+        with open(
+            os.path.join(os.path.dirname(os.path.abspath(__file__)), "config.json")
+        ) as file:
+            data = json.load(file)
+        return cls(
+            unique_name=data["unique_name"],
+            matching_hotwords=data["matching_hotwords"],
+        )
+```
+
+### Main Advice Flow
+
+The core logic is cleanly structured in a single async method:
+
+```python
+async def give_advice(self):
+    # Introduce the advisor and ask for the user's problem
+    await self.capability_worker.speak(INTRO_PROMPT)
+
+    # Wait for the user to describe their problem
+    user_problem = await self.capability_worker.user_response()
+
+    # Generate a solution using the LLM
+    solution_prompt = (
+        f"The user has the following problem: {user_problem}. "
+        "Provide a helpful solution in just 1 or 2 sentences."
+    )
+    solution = self.capability_worker.text_to_text_response(solution_prompt)
+
+    # Speak the solution and ask for feedback
+    user_feedback = await self.capability_worker.run_io_loop(
+        solution + FEEDBACK_PROMPT
+    )
+
+    # Thank the user and exit
+    await self.capability_worker.speak(FINAL_PROMPT)
+    self.capability_worker.resume_normal_flow()
+```
+
+### Prompts
+
+The ability uses clear, conversational prompts:
+
+```python
+INTRO_PROMPT = "Hi! I'm your daily life advisor. Tell me about a problem you're facing."
+FEEDBACK_PROMPT = " Are you satisfied with the advice?"
+FINAL_PROMPT = "Thank you for using the daily life advisor. Goodbye!"
+```
+
+## Key SDK Functions Used
+
+<AccordionGroup>
+  <Accordion title="speak() - Text-to-Speech Output">
+    ```python
+    await self.capability_worker.speak("Hi! I'm your daily life advisor.")
+    ```
+    Converts text to speech and plays it to the user.
+  </Accordion>
+
+  <Accordion title="user_response() - Listen for Input">
+    ```python
+    user_problem = await self.capability_worker.user_response()
+    ```
+    Listens for user voice input and returns transcribed text.
+  </Accordion>
+
+  <Accordion title="text_to_text_response() - LLM Generation">
+    ```python
+    solution = self.capability_worker.text_to_text_response(solution_prompt)
+    ```
+    Sends a prompt to the LLM and returns generated text.
+  </Accordion>
+
+  <Accordion title="run_io_loop() - Combined Speak + Listen">
+    ```python
+    user_feedback = await self.capability_worker.run_io_loop(
+        solution + FEEDBACK_PROMPT
+    )
+    ```
+    Speaks text and waits for user response in one call.
+  </Accordion>
+
+  <Accordion title="resume_normal_flow() - Return to Agent">
+    ```python
+    self.capability_worker.resume_normal_flow()
+    ```
+    Returns control to the main agent personality.
+  </Accordion>
+</AccordionGroup>
+
+## Example Conversation
+
+```text
+User: "Give me advice"
+
+AI: "Hi! I'm your daily life advisor. Tell me about a problem you're facing."
+
+User: "I can't sleep at night"
+
+AI: "Try establishing a consistent bedtime routine and avoid screens an hour 
+     before sleep. Are you satisfied with the advice?"
+
+User: "Yes, thanks"
+
+AI: "Thank you for using the daily life advisor. Goodbye!"
+```
+
+<Tip>
+  This is an excellent starting point for building your own custom abilities. The code is simple, well-structured, and demonstrates core SDK patterns.
+</Tip>
+
+## Extending This Ability
+
+<CardGroup cols={2}>
+  <Card title="Add Context Memory" icon="brain">
+    Store previous advice sessions to provide more personalized recommendations
+  </Card>
+  <Card title="Category Routing" icon="route">
+    Detect problem type (work, relationships, health) and route to specialized prompts
+  </Card>
+  <Card title="Follow-up Questions" icon="message">
+    Ask clarifying questions if the problem description is vague
+  </Card>
+  <Card title="Resource Links" icon="link">
+    Provide relevant articles or resources along with advice
+  </Card>
+</CardGroup>

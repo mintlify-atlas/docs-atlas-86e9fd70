@@ -1,0 +1,658 @@
+---
+title: "Best Practices"
+description: "Voice UX, security, and development best practices for OpenHome abilities"
+---
+
+Build better abilities with these best practices for voice UX, error handling, security, and performance.
+
+---
+
+## Voice UX Best Practices
+
+### Keep Responses Short
+
+Voice interfaces require different UX than screens.
+
+<CodeGroup>
+```python ❌ Too verbose
+await self.capability_worker.speak(
+    "Okay, I've successfully processed your request and sent the email "
+    "to john@example.com with the subject line 'Meeting Tomorrow' and "
+    "the body text you provided. The email was sent at 3:45 PM Eastern "
+    "Time from your configured email account. Would you like me to do "
+    "anything else for you today?"
+)
+```
+
+```python ✅ Concise
+await self.capability_worker.speak("Email sent to John.")
+```
+</CodeGroup>
+
+<Tip>
+**Golden rule:** If it takes more than 5 seconds to speak, it's too long.
+</Tip>
+
+---
+
+### Confirm Before Destructive Actions
+
+Always ask for confirmation before:
+- Sending emails or messages
+- Deleting data
+- Making purchases
+- Controlling smart home devices
+- Running system commands
+
+<CodeGroup>
+```python Confirmation pattern
+confirmed = await self.capability_worker.run_confirmation_loop(
+    f"Send email to {recipient} with subject '{subject}'?"
+)
+
+if confirmed:
+    # Perform action
+    await self.capability_worker.speak("Email sent.")
+else:
+    await self.capability_worker.speak("Cancelled.")
+```
+</CodeGroup>
+
+---
+
+### Provide Clear Exit Paths
+
+For looped abilities, always tell users how to exit:
+
+<CodeGroup>
+```python Clear exit instructions
+await self.capability_worker.speak(
+    "I'm ready to help. Say 'stop' when you're done."
+)
+
+while True:
+    user_input = await self.capability_worker.user_response()
+    
+    if any(w in user_input.lower() for w in EXIT_WORDS):
+        await self.capability_worker.speak("Goodbye!")
+        break
+    
+    # Process input
+```
+</CodeGroup>
+
+<Warning>
+Never create a loop without a clear exit condition. Users will feel trapped.
+</Warning>
+
+---
+
+### Use Natural Language
+
+Speak like a human, not a robot.
+
+| ❌ Robotic | ✅ Natural |
+|-----------|----------|
+| "Processing request. Please wait." | "Let me check on that." |
+| "Action completed successfully." | "Done!" |
+| "Error code 404: Resource not found." | "I couldn't find that." |
+| "Would you like to proceed with the operation?" | "Should I go ahead?" |
+
+---
+
+### Handle Silence Gracefully
+
+Users might not respond immediately.
+
+<CodeGroup>
+```python Timeout handling
+try:
+    user_input = await asyncio.wait_for(
+        self.capability_worker.user_response(),
+        timeout=10.0
+    )
+except asyncio.TimeoutError:
+    await self.capability_worker.speak(
+        "I didn't catch that. Let's try again later."
+    )
+    self.capability_worker.resume_normal_flow()
+    return
+```
+</CodeGroup>
+
+---
+
+## Error Handling Best Practices
+
+### Never Fail Silently
+
+Always catch exceptions and inform the user:
+
+<CodeGroup>
+```python ❌ Silent failure
+async def run(self):
+    result = await self.fetch_data()  # Might throw exception
+    await self.capability_worker.speak(result)
+    self.capability_worker.resume_normal_flow()
+```
+
+```python ✅ Graceful error handling
+async def run(self):
+    try:
+        result = await self.fetch_data()
+        await self.capability_worker.speak(result)
+    except Exception as e:
+        self.worker.editor_logging_handler.error(f"Error: {e}")
+        await self.capability_worker.speak(
+            "Sorry, something went wrong. Please try again."
+        )
+    finally:
+        self.capability_worker.resume_normal_flow()
+```
+</CodeGroup>
+
+<Tip>
+Use `try-except-finally` to ensure `resume_normal_flow()` always gets called.
+</Tip>
+
+---
+
+### Log Everything Important
+
+Logs are your debugging lifeline:
+
+<CodeGroup>
+```python Comprehensive logging
+self.worker.editor_logging_handler.info(f"User request: {user_input}")
+self.worker.editor_logging_handler.info(f"API URL: {api_url}")
+
+try:
+    response = requests.get(api_url)
+    self.worker.editor_logging_handler.info(
+        f"API response: {response.status_code}"
+    )
+except Exception as e:
+    self.worker.editor_logging_handler.error(f"API error: {str(e)}")
+```
+</CodeGroup>
+
+Log levels:
+- `.info()` - Normal operation
+- `.warning()` - Recoverable issues
+- `.error()` - Failures
+
+<Warning>
+Never use `print()`. It doesn't show up in logs. Always use `editor_logging_handler`.
+</Warning>
+
+---
+
+### Validate User Input
+
+Don't assume user input is clean:
+
+<CodeGroup>
+```python Input validation
+user_input = await self.capability_worker.user_response()
+
+if not user_input or len(user_input.strip()) == 0:
+    await self.capability_worker.speak("I didn't catch that. Can you repeat?")
+    return
+
+# Sanitize input for API calls
+import re
+email = re.match(r"[^@]+@[^@]+\.[^@]+", user_input)
+if not email:
+    await self.capability_worker.speak("That doesn't look like a valid email.")
+    return
+```
+</CodeGroup>
+
+---
+
+## Using resume_normal_flow() Correctly
+
+### Skills MUST Call It
+
+<CodeGroup>
+```python ✅ Correct
+async def run(self):
+    await self.capability_worker.speak("Task complete.")
+    self.capability_worker.resume_normal_flow()  # Required!
+```
+</CodeGroup>
+
+<Warning>
+Without `resume_normal_flow()`, the agent will never respond to user input again. The speaker goes silent.
+</Warning>
+
+---
+
+### Daemons MUST NOT Call It
+
+<CodeGroup>
+```python ✅ Correct daemon
+async def first_function(self):
+    while True:
+        # Background work
+        await self.worker.session_tasks.sleep(5.0)
+    # No resume_normal_flow() here!
+```
+</CodeGroup>
+
+<Note>
+Daemons run independently in the background. They don't control conversation flow.
+</Note>
+
+---
+
+### Call It in finally Block
+
+Ensure it gets called even if errors occur:
+
+<CodeGroup>
+```python ✅ Fail-safe pattern
+async def run(self):
+    try:
+        # Your logic
+        await self.capability_worker.speak("Done!")
+    except Exception as e:
+        self.worker.editor_logging_handler.error(f"Error: {e}")
+        await self.capability_worker.speak("Something went wrong.")
+    finally:
+        self.capability_worker.resume_normal_flow()  # Always called
+```
+</CodeGroup>
+
+---
+
+## Exit Handling in Loops
+
+### Define Exit Words
+
+<CodeGroup>
+```python Exit word pattern
+EXIT_WORDS = {"stop", "exit", "quit", "done", "cancel", "bye", "goodbye", "leave"}
+
+while True:
+    user_input = await self.capability_worker.user_response()
+    
+    if any(word in user_input.lower() for word in EXIT_WORDS):
+        await self.capability_worker.speak("Goodbye!")
+        break
+    
+    # Continue processing
+```
+</CodeGroup>
+
+---
+
+### Tell Users How to Exit
+
+<CodeGroup>
+```python ✅ Clear instructions
+await self.capability_worker.speak(
+    "Let's start. Say 'stop' anytime to exit."
+)
+```
+
+```python ❌ No guidance
+await self.capability_worker.speak("Let's start.")
+# User doesn't know how to exit!
+```
+</CodeGroup>
+
+---
+
+## Logging Best Practices
+
+### What to Log
+
+<Steps>
+  <Step title="User interactions">
+    ```python
+    self.worker.editor_logging_handler.info(f"User said: {user_input}")
+    ```
+  </Step>
+  
+  <Step title="External API calls">
+    ```python
+    self.worker.editor_logging_handler.info(f"Calling API: {url}")
+    self.worker.editor_logging_handler.info(f"Response: {response.status_code}")
+    ```
+  </Step>
+  
+  <Step title="State changes">
+    ```python
+    self.worker.editor_logging_handler.info(f"Alarm set for {target_time}")
+    ```
+  </Step>
+  
+  <Step title="Errors">
+    ```python
+    self.worker.editor_logging_handler.error(f"Failed to parse JSON: {e}")
+    ```
+  </Step>
+</Steps>
+
+---
+
+### What NOT to Log
+
+<Warning>
+**Never log sensitive data:**
+- Passwords
+- API keys
+- Personal information (emails, phone numbers)
+- Private conversations
+</Warning>
+
+<CodeGroup>
+```python ❌ Don't log secrets
+self.worker.editor_logging_handler.info(f"API key: {API_KEY}")
+```
+
+```python ✅ Log safely
+self.worker.editor_logging_handler.info("API call successful")
+```
+</CodeGroup>
+
+---
+
+## Security Best Practices
+
+### Never Hardcode Secrets
+
+<CodeGroup>
+```python ❌ Hardcoded credentials
+API_KEY = "sk-1234567890abcdef"
+DB_PASSWORD = "mypassword123"
+```
+
+```python ✅ Use environment config
+import os
+API_KEY = os.environ.get("API_KEY")
+
+# Or collect from user during setup
+await self.capability_worker.speak("What's your API key?")
+api_key = await self.capability_worker.user_response()
+```
+</CodeGroup>
+
+---
+
+### Validate Commands Before Execution
+
+When using `exec_local_command()`, always validate:
+
+<CodeGroup>
+```python ❌ Dangerous
+command = await self.capability_worker.user_response()
+await self.capability_worker.exec_local_command(command)  # User could say "rm -rf /"
+```
+
+```python ✅ Safe
+DESTRUCTIVE_COMMANDS = ["rm", "del", "format", "mkfs", "dd"]
+
+command = await self.capability_worker.user_response()
+
+if any(cmd in command.lower() for cmd in DESTRUCTIVE_COMMANDS):
+    await self.capability_worker.speak("I can't run that command for safety reasons.")
+    return
+
+confirmed = await self.capability_worker.run_confirmation_loop(
+    f"Run command: {command}?"
+)
+
+if confirmed:
+    await self.capability_worker.exec_local_command(command)
+```
+</CodeGroup>
+
+---
+
+### Sanitize File Paths
+
+<CodeGroup>
+```python Path validation
+import os
+
+def is_safe_path(path: str) -> bool:
+    # Prevent directory traversal
+    if ".." in path:
+        return False
+    
+    # Only allow specific directories
+    allowed_dirs = ["/home/user/documents", "/tmp"]
+    abs_path = os.path.abspath(path)
+    
+    return any(abs_path.startswith(d) for d in allowed_dirs)
+
+if not is_safe_path(user_provided_path):
+    await self.capability_worker.speak("Invalid file path.")
+    return
+```
+</CodeGroup>
+
+---
+
+## Performance Best Practices
+
+### Use Async Properly
+
+<CodeGroup>
+```python ❌ Blocking
+import time
+
+time.sleep(5)  # Blocks entire event loop
+await self.capability_worker.speak("Done")
+```
+
+```python ✅ Non-blocking
+await self.worker.session_tasks.sleep(5.0)  # Async sleep
+await self.capability_worker.speak("Done")
+```
+</CodeGroup>
+
+---
+
+### Stream Large Responses
+
+Don't load everything into memory:
+
+<CodeGroup>
+```python ❌ Load entire file
+data = requests.get(large_file_url).content  # Could be GBs
+```
+
+```python ✅ Stream
+response = requests.get(large_file_url, stream=True)
+for chunk in response.iter_content(chunk_size=8192):
+    # Process chunk
+    pass
+```
+</CodeGroup>
+
+---
+
+### Clean Up Resources
+
+<CodeGroup>
+```python Resource cleanup
+async def run(self):
+    file_handle = None
+    
+    try:
+        file_handle = open("data.txt", "r")
+        data = file_handle.read()
+        # Process data
+    except Exception as e:
+        self.worker.editor_logging_handler.error(f"Error: {e}")
+    finally:
+        if file_handle:
+            file_handle.close()
+        self.capability_worker.resume_normal_flow()
+```
+</CodeGroup>
+
+---
+
+## Testing Best Practices
+
+### Test Edge Cases
+
+<Steps>
+  <Step title="Empty input">
+    What happens if user says nothing?
+  </Step>
+  
+  <Step title="Invalid input">
+    What if user provides malformed data?
+  </Step>
+  
+  <Step title="API failures">
+    What if the external API is down?
+  </Step>
+  
+  <Step title="Timeout">
+    What if operations take too long?
+  </Step>
+</Steps>
+
+---
+
+### Use Logging for Debugging
+
+<CodeGroup>
+```python Debug logging
+self.worker.editor_logging_handler.info(f"Starting ability with input: {user_input}")
+self.worker.editor_logging_handler.info(f"Step 1 complete")
+self.worker.editor_logging_handler.info(f"API returned: {response}")
+self.worker.editor_logging_handler.info(f"Exiting ability")
+```
+</CodeGroup>
+
+---
+
+## File Operations Best Practices
+
+### Always Delete Before Writing JSON
+
+<CodeGroup>
+```python ❌ Will corrupt JSON
+await self.capability_worker.write_file("data.json", json.dumps(data))
+# write_file() appends - calling twice creates: [old][new]
+```
+
+```python ✅ Correct pattern
+if await self.capability_worker.check_if_file_exists("data.json", False):
+    await self.capability_worker.delete_file("data.json", False)
+
+await self.capability_worker.write_file(
+    "data.json",
+    json.dumps(data),
+    False
+)
+```
+</CodeGroup>
+
+<Warning>
+`write_file()` appends by default. Always delete first when writing structured data.
+</Warning>
+
+---
+
+### Handle Missing Files
+
+<CodeGroup>
+```python Safe file reading
+if not await self.capability_worker.check_if_file_exists("config.json", False):
+    # File doesn't exist - use defaults
+    config = {"default": "value"}
+else:
+    raw = await self.capability_worker.read_file("config.json", False)
+    try:
+        config = json.loads(raw)
+    except json.JSONDecodeError:
+        # Corrupted file - use defaults
+        config = {"default": "value"}
+```
+</CodeGroup>
+
+---
+
+## Development Workflow
+
+<Steps>
+  <Step title="Start with a template">
+    Use the closest template to your use case. Don't start from scratch.
+  </Step>
+  
+  <Step title="Add logging early">
+    Add logs before testing. They're essential for debugging.
+  </Step>
+  
+  <Step title="Test in Live Editor">
+    Iterate quickly with Live Editor before zipping and uploading.
+  </Step>
+  
+  <Step title="Handle errors">
+    Wrap main logic in try-except-finally blocks.
+  </Step>
+  
+  <Step title="Test edge cases">
+    Try empty input, invalid data, API failures, timeouts.
+  </Step>
+  
+  <Step title="Commit and monitor">
+    Commit changes and monitor production logs for issues.
+  </Step>
+</Steps>
+
+---
+
+## Quick Reference
+
+### ✅ Do
+
+- Keep voice responses under 5 seconds
+- Confirm before destructive actions
+- Always call `resume_normal_flow()` in Skills
+- Use `try-except-finally` for error handling
+- Log user interactions and errors
+- Validate user input
+- Use `session_tasks.sleep()` instead of `asyncio.sleep()`
+- Delete files before writing JSON
+- Test edge cases thoroughly
+
+### ❌ Don't
+
+- Use verbose responses
+- Forget `resume_normal_flow()` in Skills
+- Call `resume_normal_flow()` in daemons
+- Use `print()` for logging
+- Hardcode secrets or credentials
+- Run unvalidated commands with `exec_local_command()`
+- Use `asyncio.sleep()` in long-running operations
+- Log sensitive data
+- Fail silently without user feedback
+- Create loops without exit conditions
+
+---
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Templates" icon="layer-group" href="/building/templates">
+    Explore available templates
+  </Card>
+  <Card title="Common Patterns" icon="code" href="/building/patterns">
+    Reusable code patterns
+  </Card>
+  <Card title="Testing Guide" icon="flask" href="/building/testing">
+    Test your abilities
+  </Card>
+  <Card title="SDK Reference" icon="book" href="/api/capability-worker">
+    Complete API documentation
+  </Card>
+</CardGroup>

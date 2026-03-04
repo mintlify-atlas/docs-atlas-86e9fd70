@@ -1,0 +1,631 @@
+---
+title: 'Flow Control & Session Management'
+description: 'Control flow, logging, and task management'
+icon: 'traffic-light'
+---
+
+## Overview
+
+Flow control methods manage the lifecycle of your Ability and signal the Agent when your Ability is done.
+
+<Warning>
+**CRITICAL: Every Ability MUST call `resume_normal_flow()` before exiting.**
+
+Without it, the Agent goes silent and the user must restart the conversation.
+</Warning>
+
+---
+
+## resume_normal_flow()
+
+Returns control to the Agent. **You MUST call this when your Ability is done.**
+
+### Signature
+
+```python
+self.capability_worker.resume_normal_flow()
+```
+
+**Synchronous** - Do NOT use `await`
+
+### When to Call
+
+Call `resume_normal_flow()` on **EVERY exit path**:
+
+- ✅ End of main logic (happy path)
+- ✅ After every `break` in a loop
+- ✅ Inside `except` blocks (error fallback)
+- ✅ After timeout
+- ✅ After user says "exit"/"stop"/"quit"
+
+<Note>
+Think of `resume_normal_flow()` like `return` in a function - it signals "I'm done, give control back."
+</Note>
+
+### Examples
+
+<CodeGroup>
+
+```python Basic Usage
+async def run(self):
+    await self.capability_worker.speak("Hello!")
+    
+    # ALWAYS call resume_normal_flow at the end
+    self.capability_worker.resume_normal_flow()
+```
+
+```python With Loop Exit
+async def run(self):
+    while True:
+        user_input = await self.capability_worker.user_response()
+        
+        if "stop" in user_input.lower():
+            await self.capability_worker.speak("Goodbye!")
+            break  # Exiting loop
+    
+    # MUST call after loop ends
+    self.capability_worker.resume_normal_flow()
+```
+
+```python With Error Handling
+async def run(self):
+    try:
+        result = await some_api_call()
+        await self.capability_worker.speak(f"Result: {result}")
+    except Exception as e:
+        self.worker.editor_logging_handler.error(f"Error: {e}")
+        await self.capability_worker.speak("Sorry, something went wrong.")
+    
+    # Called on both success AND error paths
+    self.capability_worker.resume_normal_flow()
+```
+
+```python Multiple Exit Paths
+async def run(self):
+    confirmed = await self.capability_worker.run_confirmation_loop(
+        "Should I continue?"
+    )
+    
+    if not confirmed:
+        await self.capability_worker.speak("Okay, stopping.")
+        self.capability_worker.resume_normal_flow()  # Exit path 1
+        return
+    
+    # Do work
+    await self.capability_worker.speak("All done!")
+    self.capability_worker.resume_normal_flow()  # Exit path 2
+```
+
+</CodeGroup>
+
+### Pre-Launch Checklist
+
+Before shipping any Ability, verify:
+
+- [ ] Called after the main flow completes?
+- [ ] Called after every `break` statement?
+- [ ] Called in every `except` block that ends the ability?
+- [ ] Called after timeout logic?
+- [ ] Called after user exit detection ("stop", "quit", etc.)?
+
+<Warning>
+**Common mistake:**
+
+```python
+# ❌ WRONG - resume_normal_flow inside loop
+while True:
+    user_input = await self.capability_worker.user_response()
+    await self.capability_worker.speak("Got it.")
+    self.capability_worker.resume_normal_flow()  # Will exit after 1 turn!
+
+# ✅ CORRECT - resume_normal_flow after loop
+while True:
+    user_input = await self.capability_worker.user_response()
+    if "stop" in user_input.lower():
+        break
+    await self.capability_worker.speak("Got it.")
+
+self.capability_worker.resume_normal_flow()  # After loop ends
+```
+</Warning>
+
+---
+
+## send_interrupt_signal()
+
+Sends an interrupt event to stop the current assistant output (speech/audio) and immediately return to user input.
+
+### Signature
+
+```python
+await self.capability_worker.send_interrupt_signal()
+```
+
+**Async** - Use `await`
+
+### When to Use
+
+- User says "stop" during long output
+- Emergency cutoff during audio playback
+- Manual override to return to listening state
+
+### Example
+
+```python
+async def run(self):
+    # Start playing long audio
+    await self.capability_worker.speak(
+        "I'm about to tell you a very long story..."
+    )
+    
+    # User interrupts
+    await self.capability_worker.send_interrupt_signal()
+    
+    # Now listening for user input
+    user_input = await self.capability_worker.user_response()
+    
+    if "skip" in user_input.lower():
+        await self.capability_worker.speak("Skipping ahead.")
+    
+    self.capability_worker.resume_normal_flow()
+```
+
+<Tip>
+Most Abilities don't need `send_interrupt_signal()`. Use it only when you need manual control over stopping output.
+</Tip>
+
+---
+
+## AgentWorker Reference
+
+Access `AgentWorker` via `self.worker` for logging, session management, and user connection info.
+
+### Initialization
+
+```python
+class MyAbility(MatchingCapability):
+    worker: AgentWorker = None
+    capability_worker: CapabilityWorker = None
+    
+    def call(self, worker: AgentWorker):
+        self.worker = worker  # Store AgentWorker reference
+        self.capability_worker = CapabilityWorker(self)
+        self.worker.session_tasks.create(self.run())
+```
+
+---
+
+## Logging
+
+### editor_logging_handler
+
+**Always use this. Never use `print()`.**
+
+```python
+self.worker.editor_logging_handler.info("Something happened")
+self.worker.editor_logging_handler.error("Something broke")
+self.worker.editor_logging_handler.warning("Something suspicious")
+self.worker.editor_logging_handler.debug("Debugging info")
+```
+
+### Why Not `print()`?
+
+- `print()` doesn't appear in the Live Editor logs
+- Logs are critical for debugging deployed Abilities
+- Logging provides timestamps and severity levels
+
+### Examples
+
+<CodeGroup>
+
+```python API Calls
+self.worker.editor_logging_handler.info("Calling weather API...")
+
+response = requests.get(weather_url, timeout=10)
+
+self.worker.editor_logging_handler.info(
+    f"Weather API returned: {response.status_code}"
+)
+```
+
+```python Error Logging
+try:
+    result = api_call()
+except requests.RequestException as e:
+    self.worker.editor_logging_handler.error(f"API call failed: {e}")
+    await self.capability_worker.speak("Sorry, I couldn't fetch that.")
+```
+
+```python Debugging
+self.worker.editor_logging_handler.debug(f"User input: {user_input}")
+self.worker.editor_logging_handler.debug(f"Parsed intent: {intent}")
+```
+
+```python Warnings
+if confidence < 0.5:
+    self.worker.editor_logging_handler.warning(
+        f"Low confidence: {confidence}"
+    )
+```
+
+</CodeGroup>
+
+<Tip>
+Log **before and after** API calls so you can track when/where things go wrong in production.
+</Tip>
+
+---
+
+## Session Tasks
+
+OpenHome's managed task system ensures async work gets properly cancelled when sessions end.
+
+<Warning>
+**Never use raw `asyncio` methods.**
+
+Raw `asyncio` tasks can outlive a session. If the user disconnects, your task keeps running as a ghost process.
+</Warning>
+
+### session_tasks.create()
+
+Launches an async task within the agent's managed lifecycle.
+
+```python
+self.worker.session_tasks.create(coroutine)
+```
+
+**Use instead of:** `asyncio.create_task()`
+
+#### Examples
+
+<CodeGroup>
+
+```python Launch Ability
+def call(self, worker: AgentWorker):
+    self.worker = worker
+    self.capability_worker = CapabilityWorker(self)
+    
+    # Launch main Ability task
+    self.worker.session_tasks.create(self.run())
+```
+
+```python Background Task
+async def run(self):
+    # Launch background timer
+    self.worker.session_tasks.create(self.timer_task())
+    
+    # Continue main flow
+    await self.capability_worker.speak("Timer started!")
+    self.capability_worker.resume_normal_flow()
+
+async def timer_task(self):
+    await self.worker.session_tasks.sleep(60)
+    await self.capability_worker.speak("Time's up!")
+```
+
+</CodeGroup>
+
+### session_tasks.sleep()
+
+Pauses execution for the specified duration.
+
+```python
+await self.worker.session_tasks.sleep(seconds: float)
+```
+
+**Use instead of:** `asyncio.sleep()`
+
+#### Examples
+
+<CodeGroup>
+
+```python Delay
+await self.capability_worker.speak("I'll check back in 5 seconds.")
+await self.worker.session_tasks.sleep(5.0)
+await self.capability_worker.speak("Time's up!")
+```
+
+```python Timer
+self.worker.editor_logging_handler.info("Starting 60-second timer")
+
+await self.worker.session_tasks.sleep(60)
+
+await self.capability_worker.speak("Timer finished!")
+await self.capability_worker.play_from_audio_file("alarm.mp3")
+```
+
+```python Retry with Backoff
+for attempt in range(3):
+    try:
+        result = api_call()
+        break
+    except Exception:
+        self.worker.editor_logging_handler.warning(f"Attempt {attempt+1} failed")
+        await self.worker.session_tasks.sleep(2 ** attempt)  # 1s, 2s, 4s
+```
+
+</CodeGroup>
+
+<Tip>
+Use `session_tasks.sleep()` for delays and timers. It's automatically cancelled if the user disconnects.
+</Tip>
+
+---
+
+## User Connection Info
+
+### get_timezone()
+
+Returns the user's timezone string.
+
+```python
+timezone = self.capability_worker.get_timezone()
+```
+
+**Synchronous** - Do NOT use `await`
+
+**Returns:** Timezone string like `"America/Chicago"` or `None`
+
+#### Example
+
+```python
+timezone = self.capability_worker.get_timezone()
+
+if timezone:
+    self.worker.editor_logging_handler.info(f"User timezone: {timezone}")
+    # Use for date/time formatting
+else:
+    self.worker.editor_logging_handler.warning("Timezone unavailable")
+```
+
+### user_socket.client.host
+
+The user's public IP address at connection time.
+
+```python
+user_ip = self.worker.user_socket.client.host
+```
+
+#### Example
+
+```python
+user_ip = self.worker.user_socket.client.host
+self.worker.editor_logging_handler.info(f"User connected from: {user_ip}")
+
+# Use for IP geolocation (check for cloud IPs first)
+if "amazonaws" not in user_ip:
+    location = geolocate(user_ip)
+```
+
+<Warning>
+Cloud/datacenter IPs won't give useful location data. Check the ISP name for keywords like "amazon", "aws", "google cloud" before using for geolocation.
+</Warning>
+
+---
+
+## Music Mode
+
+Signal long-form audio playback to stop listening and prevent interruptions.
+
+### Pattern
+
+```python
+# 1. Enter music mode
+self.worker.music_mode_event.set()
+await self.capability_worker.send_data_over_websocket(
+    "music-mode",
+    {"mode": "on"}
+)
+
+# 2. Play audio
+await self.capability_worker.play_audio(audio_bytes)
+
+# 3. Exit music mode
+await self.capability_worker.send_data_over_websocket(
+    "music-mode",
+    {"mode": "off"}
+)
+self.worker.music_mode_event.clear()
+```
+
+### Example
+
+```python
+async def play_music(self):
+    try:
+        # Enter music mode
+        self.worker.music_mode_event.set()
+        await self.capability_worker.send_data_over_websocket(
+            "music-mode",
+            {"mode": "on"}
+        )
+        
+        # Play audio
+        audio = requests.get("https://example.com/song.mp3").content
+        await self.capability_worker.play_audio(audio)
+        
+    finally:
+        # Always exit music mode
+        await self.capability_worker.send_data_over_websocket(
+            "music-mode",
+            {"mode": "off"}
+        )
+        self.worker.music_mode_event.clear()
+    
+    self.capability_worker.resume_normal_flow()
+```
+
+See [Audio Playback](/api/audio#music-mode) for full details.
+
+---
+
+## Conversation History
+
+### get_full_message_history()
+
+Returns the full conversation history from the current session.
+
+```python
+history = self.capability_worker.get_full_message_history()
+```
+
+**Synchronous** - Do NOT use `await`
+
+**Returns:** List of message objects with `role` and `content`
+
+#### Example
+
+```python
+history = self.capability_worker.get_full_message_history()
+
+self.worker.editor_logging_handler.info(
+    f"Conversation has {len(history)} messages"
+)
+
+# Use for context-aware responses
+for msg in history[-3:]:  # Last 3 messages
+    self.worker.editor_logging_handler.info(
+        f"{msg['role']}: {msg['content']}"
+    )
+```
+
+See [LLM Documentation](/api/llm#conversation-history) for using history with `text_to_text_response()`.
+
+---
+
+## Complete Example
+
+```python main.py
+import json
+from src.agent.capability import MatchingCapability
+from src.main import AgentWorker
+from src.agent.capability_worker import CapabilityWorker
+
+EXIT_WORDS = {"stop", "exit", "quit", "done"}
+
+class HelperAbility(MatchingCapability):
+    worker: AgentWorker = None
+    capability_worker: CapabilityWorker = None
+    
+    def call(self, worker: AgentWorker):
+        # Initialize
+        self.worker = worker
+        self.capability_worker = CapabilityWorker(self)
+        
+        # Launch main task
+        self.worker.session_tasks.create(self.run())
+    
+    async def run(self):
+        # Log start
+        self.worker.editor_logging_handler.info("HelperAbility started")
+        
+        try:
+            # Greet user
+            await self.capability_worker.speak(
+                "Hi! Ask me anything, or say stop when done."
+            )
+            
+            # Main loop
+            while True:
+                user_input = await self.capability_worker.user_response()
+                
+                if not user_input:
+                    continue
+                
+                # Log input
+                self.worker.editor_logging_handler.info(
+                    f"User said: {user_input}"
+                )
+                
+                # Check for exit
+                if any(word in user_input.lower() for word in EXIT_WORDS):
+                    await self.capability_worker.speak("Goodbye!")
+                    break
+                
+                # Generate response
+                response = self.capability_worker.text_to_text_response(
+                    f"Give a helpful 1-sentence response: {user_input}"
+                )
+                
+                # Log response
+                self.worker.editor_logging_handler.info(
+                    f"LLM response: {response}"
+                )
+                
+                # Speak response
+                await self.capability_worker.speak(response)
+        
+        except Exception as e:
+            # Log error
+            self.worker.editor_logging_handler.error(f"Error: {e}")
+            await self.capability_worker.speak(
+                "Sorry, something went wrong."
+            )
+        
+        finally:
+            # ALWAYS resume normal flow
+            self.worker.editor_logging_handler.info("HelperAbility ending")
+            self.capability_worker.resume_normal_flow()
+```
+
+---
+
+## Best Practices
+
+### Always Resume Normal Flow
+
+```python
+# ✅ Good - called on all paths
+async def run(self):
+    try:
+        await self.do_work()
+    except Exception:
+        await self.capability_worker.speak("Error occurred.")
+    
+    self.capability_worker.resume_normal_flow()  # Always called
+
+# ❌ Bad - forgotten on error path
+async def run(self):
+    try:
+        await self.do_work()
+        self.capability_worker.resume_normal_flow()
+    except Exception:
+        await self.capability_worker.speak("Error occurred.")  # Forgot resume!
+```
+
+### Use session_tasks, Not asyncio
+
+```python
+# ✅ Good
+self.worker.session_tasks.create(self.background_task())
+await self.worker.session_tasks.sleep(5.0)
+
+# ❌ Bad - can leak tasks
+asyncio.create_task(self.background_task())
+await asyncio.sleep(5.0)
+```
+
+### Log Everything Important
+
+```python
+# ✅ Good
+self.worker.editor_logging_handler.info("Calling API...")
+result = api_call()
+self.worker.editor_logging_handler.info(f"API returned: {result}")
+
+# ❌ Bad - no visibility
+result = api_call()
+```
+
+---
+
+## Related Methods
+
+<CardGroup cols={2}>
+  <Card title="Listening" icon="microphone" href="/api/listening">
+    Always call resume_normal_flow() after input loops
+  </Card>
+  <Card title="LLM" icon="brain" href="/api/llm">
+    Use get_full_message_history() for context
+  </Card>
+</CardGroup>

@@ -1,0 +1,202 @@
+---
+title: Basic Template
+description: Minimal skill skeleton — the starting point for any new ability
+---
+
+<Note>
+  The basic template is the absolute minimum scaffolding for a working Skill. Use this as the foundation for any new ability.
+</Note>
+
+## What is it?
+
+The **basic-template** demonstrates the core structure of an OpenHome Skill. It shows:
+
+- Correct `CapabilityWorker` initialization inside `call()`
+- The `run()` entry point pattern
+- Basic voice interaction flow: speak → listen → respond
+- The mandatory `resume_normal_flow()` exit
+
+This template is intentionally minimal — no API calls, no loops, no file storage. Just the essential lifecycle of a Skill.
+
+## When to use it
+
+Use the basic template when you're:
+
+- Building your first OpenHome ability
+- Creating a simple voice interaction that runs once and exits
+- Prototyping a new skill pattern
+- Learning the SDK fundamentals
+
+## Complete code
+
+<CodeGroup>
+
+```python main.py
+import json
+import os
+from src.agent.capability import MatchingCapability
+from src.main import AgentWorker
+from src.agent.capability_worker import CapabilityWorker
+
+INTRO_PROMPT = "Hi! How can I help you today?"
+FEEDBACK_PROMPT = " Are you satisfied with the response?"
+FINAL_PROMPT = "Thank you for using the advisor. Goodbye!"
+
+class BasicTemplateCapability(MatchingCapability):
+    worker: AgentWorker = None
+    capability_worker: CapabilityWorker = None
+
+    #{{register capability}}
+
+    async def run(self):
+        """
+        The main function for the basic template capability.
+        It greets the user, listens for their response, generates a reply, and asks for feedback.
+        """
+
+        # Introduce and ask for the user's input
+        """
+        - `speak` function is used to speak the text to the user. It takes the text as an argument.
+                Here, the advisor greets the user and asks how it can help.
+        """
+        await self.capability_worker.speak(INTRO_PROMPT)
+
+        """
+        - `user_response` function is used to get the user's response. It returns the user's response.
+                Here, the user's input is stored in the `user_input` variable.
+        """
+        user_input = await self.capability_worker.user_response()
+
+        # Generate a response based on the user's input
+        response_prompt = f"Give a short, helpful response to: {user_input}"
+        """
+        - `text_to_text_response` function is used to generate a response based on the user's input. It returns the generated response based on the input prompt.
+                Here, the response is stored in the `response` variable.
+        """
+        response = self.capability_worker.text_to_text_response(response_prompt)
+
+        # Speak the response and ask if the user is satisfied
+        response_with_feedback_ask = response + FEEDBACK_PROMPT
+
+        """
+        - `run_io_loop` function is used to speak the response and get the user's feedback. It returns the user's feedback.
+                It is a combination of `speak` and `user_response` functions.
+                Here, the user's feedback is stored in the `user_feedback` variable.
+        """
+        user_feedback = await self.capability_worker.run_io_loop(response_with_feedback_ask)
+
+        # Thank the user and exit
+        await self.capability_worker.speak(FINAL_PROMPT)
+
+        # Resume the normal workflow
+        self.capability_worker.resume_normal_flow()
+
+    def call(self, worker: AgentWorker):
+        # Initialize the worker and capability worker
+        self.worker = worker
+        self.capability_worker = CapabilityWorker(self)
+
+        # Start the template functionality
+        self.worker.session_tasks.create(self.run())
+```
+
+</CodeGroup>
+
+## Key patterns
+
+### The `call()` initializer
+
+```python
+def call(self, worker: AgentWorker):
+    self.worker = worker
+    self.capability_worker = CapabilityWorker(self)
+    self.worker.session_tasks.create(self.run())
+```
+
+Every Skill must implement `call()`. This is where you:
+1. Store the `AgentWorker` reference
+2. Initialize `CapabilityWorker` with `self` (the capability instance)
+3. Create an async task for your main logic using `session_tasks.create()`
+
+### The voice interaction loop
+
+<Steps>
+  <Step title="Speak to the user">
+    Use `speak()` to output text as synthesized speech:
+    ```python
+    await self.capability_worker.speak("Hi! How can I help you today?")
+    ```
+  </Step>
+  
+  <Step title="Listen for input">
+    Use `user_response()` to capture the next thing the user says:
+    ```python
+    user_input = await self.capability_worker.user_response()
+    ```
+  </Step>
+  
+  <Step title="Generate a response">
+    Use `text_to_text_response()` to send a prompt to the LLM:
+    ```python
+    response = self.capability_worker.text_to_text_response(
+        f"Give a short, helpful response to: {user_input}"
+    )
+    ```
+  </Step>
+  
+  <Step title="Speak and listen together">
+    Use `run_io_loop()` as a shortcut for speak + listen:
+    ```python
+    user_feedback = await self.capability_worker.run_io_loop(
+        "Are you satisfied with the response?"
+    )
+    ```
+  </Step>
+</Steps>
+
+### The mandatory exit
+
+<Warning>
+  Every Skill **must** call `resume_normal_flow()` when done. This hands control back to the agent's normal conversation. Forget it, and the speaker goes permanently silent.
+</Warning>
+
+```python
+self.capability_worker.resume_normal_flow()
+```
+
+## SDK methods used
+
+| Method | Purpose |
+|--------|----------|
+| `speak()` | Synthesize text to speech and play it to the user |
+| `user_response()` | Capture the next user utterance and return transcribed text |
+| `text_to_text_response()` | Send a prompt to the LLM and get back a text response |
+| `run_io_loop()` | Shortcut: speak a message and wait for user response |
+| `resume_normal_flow()` | Exit the ability and return control to the agent |
+
+## Example use cases
+
+Build on this template to create:
+
+- **Personal advisor** — Ask a question, get a response, collect feedback
+- **Voice-activated note taker** — Speak your note, confirm, save to storage
+- **Quick calculator** — Listen for a math problem, speak the answer
+- **Joke generator** — Tell a joke, ask if they want another
+- **Flashcard quiz** — Ask a question, check the answer, move to next card
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="API Template" icon="plug" href="/templates/api">
+    Add external API calls to fetch real-time data
+  </Card>
+  <Card title="Loop Template" icon="repeat" href="/templates/loop">
+    Create multi-turn conversations that exit on command
+  </Card>
+  <Card title="CapabilityWorker API" icon="code" href="/api/capability-worker">
+    Explore all available SDK methods
+  </Card>
+  <Card title="Ability Types" icon="bolt" href="/concepts/ability-types">
+    Learn about Skills, Daemons, and Local abilities
+  </Card>
+</CardGroup>

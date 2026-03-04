@@ -1,0 +1,277 @@
+---
+title: Loop Template
+description: Multi-turn conversation skill with exit commands — keep the conversation going until the user says stop
+---
+
+<Note>
+  The loop template demonstrates long-running Skills that maintain a conversation across multiple turns. Users can exit by saying any exit word.
+</Note>
+
+## What is it?
+
+The **loop-template** shows how to build interactive abilities with continuous back-and-forth conversations. It demonstrates:
+
+- Running a `while True` loop for multi-turn interactions
+- Listening for exit commands to break the loop gracefully
+- Processing user input repeatedly without restarting the ability
+- Maintaining conversational state across turns
+
+This is the foundation for any ability that needs to handle more than one request per activation.
+
+## When to use it
+
+Use the loop template when you're building:
+
+- **Conversational assistants** — Q&A bots, tutors, coaches
+- **Interactive games** — Trivia, 20 questions, word games
+- **Multi-step workflows** — Recipe guides, workout routines, meditation sessions
+- **Ambient observers** — Skills that listen and respond continuously until dismissed
+
+## Complete code
+
+<CodeGroup>
+
+```python main.py
+import json
+from src.agent.capability import MatchingCapability
+from src.main import AgentWorker
+from src.agent.capability_worker import CapabilityWorker
+
+# =============================================================================
+# LOOP TEMPLATE
+# For interactive Abilities with multi-turn conversations.
+# Pattern: Greet → Loop (Listen → Process → Respond) → Exit on command
+#
+# Replace the processing logic inside the while loop with your own.
+# =============================================================================
+
+# Words that will exit the Ability and return to normal flow
+EXIT_WORDS = {"stop", "exit", "quit", "done", "cancel", "bye", "goodbye", "leave"}
+
+class LoopTemplateCapability(MatchingCapability):
+    worker: AgentWorker = None
+    capability_worker: CapabilityWorker = None
+
+    # Do not change following tag of register capability
+    #{{register capability}}
+
+    def call(self, worker: AgentWorker):
+        self.worker = worker
+        self.capability_worker = CapabilityWorker(self)
+        self.worker.session_tasks.create(self.run())
+
+    async def run(self):
+        # Greet the user
+        await self.capability_worker.speak(
+            "I'm ready to help. Ask me anything, or say stop when you're done."
+        )
+
+        while True:
+            # Listen for user input
+            user_input = await self.capability_worker.user_response()
+
+            # Skip empty input
+            if not user_input:
+                continue
+
+            # Check for exit commands
+            if any(word in user_input.lower() for word in EXIT_WORDS):
+                await self.capability_worker.speak("Goodbye!")
+                break
+
+            # --- YOUR LOGIC HERE ---
+            # Process the input and generate a response.
+            # This example uses the LLM, but you can do anything:
+            # call APIs, play audio, run calculations, etc.
+            response = self.capability_worker.text_to_text_response(
+                f"Respond in one short sentence: {user_input}"
+            )
+            await self.capability_worker.speak(response)
+
+        # ALWAYS resume normal flow when the loop ends
+        self.capability_worker.resume_normal_flow()
+```
+
+</CodeGroup>
+
+## Key patterns
+
+### The conversation loop
+
+The core pattern is a `while True` loop that runs until an exit command is detected:
+
+```python
+while True:
+    # Listen for user input
+    user_input = await self.capability_worker.user_response()
+    
+    # Check for exit
+    if any(word in user_input.lower() for word in EXIT_WORDS):
+        await self.capability_worker.speak("Goodbye!")
+        break
+    
+    # Process and respond
+    response = self.capability_worker.text_to_text_response(
+        f"Respond in one short sentence: {user_input}"
+    )
+    await self.capability_worker.speak(response)
+```
+
+### Exit detection
+
+<Steps>
+  <Step title="Define exit words">
+    Create a set of words that will end the conversation:
+    ```python
+    EXIT_WORDS = {"stop", "exit", "quit", "done", "cancel", "bye", "goodbye", "leave"}
+    ```
+  </Step>
+  
+  <Step title="Check each input">
+    Use `any()` to check if any exit word appears in the user's message:
+    ```python
+    if any(word in user_input.lower() for word in EXIT_WORDS):
+        await self.capability_worker.speak("Goodbye!")
+        break
+    ```
+  </Step>
+  
+  <Step title="Always acknowledge exit">
+    Speak a goodbye message before breaking the loop so the user knows the ability is exiting:
+    ```python
+    await self.capability_worker.speak("Goodbye!")
+    ```
+  </Step>
+</Steps>
+
+### Handling empty input
+
+<Note>
+  Sometimes `user_response()` returns empty strings (e.g., background noise, failed transcription). Always skip empty input to avoid processing errors.
+</Note>
+
+```python
+if not user_input:
+    continue
+```
+
+### State management across turns
+
+You can maintain state across loop iterations using instance variables:
+
+```python
+class QuizCapability(MatchingCapability):
+    score: int = 0
+    questions_asked: int = 0
+    
+    async def run(self):
+        while True:
+            # Ask question
+            user_answer = await self.capability_worker.user_response()
+            
+            # Check answer and update state
+            if self.check_answer(user_answer):
+                self.score += 1
+            self.questions_asked += 1
+            
+            # Continue or exit
+            if self.questions_asked >= 10:
+                await self.capability_worker.speak(
+                    f"Quiz complete! Your score: {self.score} out of 10"
+                )
+                break
+```
+
+## Customization points
+
+### Replace the processing logic
+
+The template uses `text_to_text_response()` as a placeholder. Replace this with your own logic:
+
+<CodeGroup>
+
+```python LLM-based responses
+# Use the LLM to generate responses
+response = self.capability_worker.text_to_text_response(
+    f"Respond in one short sentence: {user_input}"
+)
+await self.capability_worker.speak(response)
+```
+
+```python API calls
+# Call an external API
+data = await self.fetch_api_data(user_input)
+response = self.format_response(data)
+await self.capability_worker.speak(response)
+```
+
+```python Game logic
+# Implement game mechanics
+if self.check_answer(user_input):
+    await self.capability_worker.speak("Correct! Next question...")
+else:
+    await self.capability_worker.speak(f"Sorry, the answer was {self.current_answer}")
+```
+
+```python Audio playback
+# Play audio files
+if "play" in user_input:
+    await self.capability_worker.play_from_audio_file("song.mp3")
+    await self.capability_worker.speak("Playing your song")
+```
+
+</CodeGroup>
+
+### Customize exit words
+
+Add domain-specific exit phrases:
+
+```python
+# For a workout coach
+EXIT_WORDS = {"stop", "exit", "quit", "done", "finish workout", "end session"}
+
+# For a meditation guide
+EXIT_WORDS = {"stop", "exit", "quit", "done", "end meditation", "wake up"}
+
+# For a game
+EXIT_WORDS = {"stop", "exit", "quit", "done", "forfeit", "give up"}
+```
+
+## SDK methods used
+
+| Method | Purpose |
+|--------|----------|
+| `speak()` | Synthesize text to speech and play it to the user |
+| `user_response()` | Capture the next user utterance and return transcribed text |
+| `text_to_text_response()` | Send a prompt to the LLM and get back a text response |
+| `resume_normal_flow()` | Exit the ability and return control to the agent |
+
+## Real-world examples
+
+Build on this template to create:
+
+- **Trivia game** — Ask questions, check answers, keep score
+- **Language tutor** — Teach vocabulary, correct pronunciation, track progress
+- **Recipe guide** — Read steps, answer questions, adjust timing
+- **Workout coach** — Count reps, track sets, give encouragement
+- **Meditation guide** — Lead breathing exercises, play sounds, track duration
+- **Study buddy** — Quiz on flashcards, explain concepts, test knowledge
+- **Storyteller** — Tell interactive stories with user choices
+- **Math tutor** — Present problems, check solutions, explain steps
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Watcher Template" icon="eye" href="/templates/watcher">
+    Run background daemons that monitor continuously
+  </Card>
+  <Card title="File Storage" icon="folder" href="/api/files">
+    Persist state between sessions
+  </Card>
+  <Card title="Audio Playback" icon="music" href="/api/audio">
+    Play sound effects and music in your loop
+  </Card>
+  <Card title="Examples" icon="lightbulb" href="/examples/quiz-game">
+    See real interactive game examples
+  </Card>
+</CardGroup>

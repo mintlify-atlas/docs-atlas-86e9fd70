@@ -1,0 +1,183 @@
+---
+title: What Are Abilities?
+description: Understanding OpenHome Abilities - modular voice AI plugins that extend what your Agent can do
+---
+
+## Overview
+
+Abilities are **modular voice AI plugins** that extend what OpenHome Agents can do. They're triggered by spoken phrases and can do anything — call APIs, play audio, run quizzes, control devices, have multi-turn conversations, and more.
+
+Each Ability is just **one file**: `main.py` — your Python logic. Write your code, zip it, upload it to OpenHome, set your trigger words in the dashboard, and your Agent can do something new.
+
+<Info>
+Abilities are the building blocks of OpenHome's extensibility. They transform a voice assistant into a programmable AI platform.
+</Info>
+
+## How Abilities Work
+
+When a user says a trigger phrase or the Agent's brain routes to your Ability, your code takes over the conversation:
+
+1. **Trigger** — User says a hotword or the routing LLM invokes your Ability
+2. **Run** — Your `main.py` executes, taking control of the conversation
+3. **Interact** — Speak to the user, listen for responses, call APIs, play audio
+4. **Exit** — Call `resume_normal_flow()` to return control to the Agent
+
+## The Basic Structure
+
+Here's the minimal scaffolding for a working Ability:
+
+```python main.py
+import json
+from src.agent.capability import MatchingCapability
+from src.main import AgentWorker
+from src.agent.capability_worker import CapabilityWorker
+
+class MyFirstCapability(MatchingCapability):
+    worker: AgentWorker = None
+    capability_worker: CapabilityWorker = None
+
+    # Do not change following tag of register capability
+    #{{register capability}}
+
+    async def run(self):
+        # Greet the user
+        await self.capability_worker.speak("Hi! Tell me what's on your mind.")
+        
+        # Listen for input
+        user_input = await self.capability_worker.user_response()
+        
+        # Process with LLM
+        response = self.capability_worker.text_to_text_response(
+            f"Give a short, helpful response to: {user_input}"
+        )
+        
+        # Speak the result
+        await self.capability_worker.speak(response)
+        
+        # CRITICAL: Always call this when done
+        self.capability_worker.resume_normal_flow()
+
+    def call(self, worker: AgentWorker):
+        self.worker = worker
+        self.capability_worker = CapabilityWorker(self)
+        self.worker.session_tasks.create(self.run())
+```
+
+<Note>
+The `#{{register capability}}` comment is required boilerplate. The platform handles configuration automatically — you never need to create or edit `config.json`.
+</Note>
+
+## Key Components
+
+### CapabilityWorker
+
+The SDK that provides all I/O functionality:
+
+- **Speaking**: `speak()`, `text_to_speech()`
+- **Listening**: `user_response()`, `wait_for_complete_transcription()`
+- **LLM**: `text_to_text_response()`
+- **Audio**: `play_audio()`, `play_from_audio_file()`
+- **Files**: `read_file()`, `write_file()`, `delete_file()`
+- **Flow Control**: `resume_normal_flow()`, `send_interrupt_signal()`
+
+### AgentWorker
+
+The Agent's runtime environment:
+
+- **Logging**: `editor_logging_handler.info()`, `.error()`, `.warning()`
+- **Session Management**: `session_tasks.create()`, `session_tasks.sleep()`
+- **User Context**: `user_socket.client.host`, timezone info
+- **Music Mode**: `music_mode_event.set()`, `music_mode_event.clear()`
+
+## Key Capabilities
+
+<CardGroup cols={2}>
+  <Card title="Voice Interaction" icon="microphone">
+    Speak to users and listen for responses with built-in TTS and STT
+  </Card>
+  <Card title="API Integration" icon="plug">
+    Call external REST APIs and speak the results naturally
+  </Card>
+  <Card title="Audio Playback" icon="music">
+    Stream music, play sound effects, or read custom audio files
+  </Card>
+  <Card title="LLM Processing" icon="brain">
+    Use language models for natural conversation and intent parsing
+  </Card>
+  <Card title="Persistent Storage" icon="database">
+    Save user preferences and data across sessions
+  </Card>
+  <Card title="Local Execution" icon="terminal">
+    Execute commands on connected devices via WebSocket
+  </Card>
+</CardGroup>
+
+## The Lifecycle
+
+Every Ability follows this pattern:
+
+```python
+async def run(self):
+    try:
+        # 1. Initialize: greet user, explain what you'll do
+        await self.capability_worker.speak("Let me help with that.")
+        
+        # 2. Gather input: listen, confirm, validate
+        user_input = await self.capability_worker.user_response()
+        
+        # 3. Process: call APIs, use LLM, compute results
+        result = self.capability_worker.text_to_text_response(user_input)
+        
+        # 4. Deliver output: speak results, play audio
+        await self.capability_worker.speak(result)
+        
+    except Exception as e:
+        # 5. Handle errors: always speak them to the user
+        self.worker.editor_logging_handler.error(f"Error: {e}")
+        await self.capability_worker.speak("Something went wrong.")
+        
+    finally:
+        # 6. Exit: ALWAYS return control to the Agent
+        self.capability_worker.resume_normal_flow()
+```
+
+<Note>
+**Critical Rule**: Every Ability MUST call `resume_normal_flow()` when done. Without it, the Agent goes silent and the user has to restart the conversation.
+</Note>
+
+## What Makes a Great Ability?
+
+### Voice-First Design
+- Keep responses to 1-2 sentences
+- Confirm before destructive actions
+- Speak all errors to the user
+- Use natural, conversational language
+
+### Robust Error Handling
+- Always wrap API calls in try/except
+- Log errors for debugging
+- Provide helpful fallback messages
+- Always exit gracefully with `resume_normal_flow()`
+
+### Clear Purpose
+- Do one thing well
+- Have clear trigger words
+- Set user expectations upfront
+- Exit cleanly when done
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Ability Types" icon="shapes" href="/concepts/ability-types">
+    Learn about Skills, Background Daemons, and Local abilities
+  </Card>
+  <Card title="Trigger Words" icon="bolt" href="/concepts/trigger-words">
+    Understand how trigger words activate your abilities
+  </Card>
+  <Card title="Getting Started" icon="rocket" href="/quickstart">
+    Build your first ability in 5 minutes
+  </Card>
+  <Card title="SDK Reference" icon="code" href="/api/capability-worker">
+    Explore all available SDK methods
+  </Card>
+</CardGroup>

@@ -1,122 +1,117 @@
 {
   "$schema": "https://mintlify.com/docs.json",
-  "theme": "mint",
-  "name": "Mint Starter Kit",
+  "name": "OpenHome Abilities",
+  "theme": "palm",
   "colors": {
-    "primary": "#16A34A",
-    "light": "#07C983",
-    "dark": "#15803D"
+    "primary": "#848484",
+    "light": "#666360",
+    "dark": "#f5f4ef"
   },
-  "favicon": "/favicon.svg",
+  "favicon": "https://media.brand.dev/6bf95e28-0f90-4196-890f-31253f1adca2.png",
+  "logo": {
+    "dark": "https://media.brand.dev/6bf95e28-0f90-4196-890f-31253f1adca2.png",
+    "light": "https://media.brand.dev/6bf95e28-0f90-4196-890f-31253f1adca2.png"
+  },
+  "navbar": {
+    "primary": {
+      "type": "github",
+      "href": "https://github.com/openhome-dev/abilities"
+    }
+  },
+  "footer": {
+    "socials": {
+      "github": "https://github.com/openhome-dev/abilities",
+      "discord": "https://discord.gg/openhome"
+    }
+  },
   "navigation": {
     "tabs": [
       {
-        "tab": "Guides",
+        "tab": "Documentation",
         "groups": [
           {
-            "group": "Getting started",
+            "group": "Get Started",
             "pages": [
-              "index",
-              "quickstart",
-              "development"
+              "introduction",
+              "quickstart"
             ]
           },
           {
-            "group": "Customization",
+            "group": "Core Concepts",
             "pages": [
-              "essentials/settings",
-              "essentials/navigation"
+              "concepts/what-are-abilities",
+              "concepts/ability-types",
+              "concepts/trigger-words"
             ]
           },
           {
-            "group": "Writing content",
+            "group": "Building Abilities",
             "pages": [
-              "essentials/markdown",
-              "essentials/code",
-              "essentials/images",
-              "essentials/reusable-snippets"
+              "building/templates",
+              "building/patterns",
+              "building/testing",
+              "building/best-practices"
             ]
           },
           {
-            "group": "AI tools",
+            "group": "Contributing",
             "pages": [
-              "ai-tools/cursor",
-              "ai-tools/claude-code",
-              "ai-tools/windsurf"
+              "contributing/overview",
+              "contributing/submission-guide",
+              "contributing/review-checklist",
+              "contributing/promotion-path"
             ]
           }
         ]
       },
       {
-        "tab": "API reference",
+        "tab": "API Reference",
         "groups": [
           {
-            "group": "API documentation",
+            "group": "SDK Reference",
             "pages": [
-              "api-reference/introduction"
+              "api/capability-worker",
+              "api/speaking",
+              "api/listening",
+              "api/llm",
+              "api/audio",
+              "api/files",
+              "api/flow-control"
             ]
           },
           {
-            "group": "Endpoint examples",
+            "group": "Templates",
             "pages": [
-              "api-reference/endpoint/get",
-              "api-reference/endpoint/create",
-              "api-reference/endpoint/delete",
-              "api-reference/endpoint/webhook"
+              "templates/basic",
+              "templates/api",
+              "templates/loop",
+              "templates/watcher",
+              "templates/alarm"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "Examples",
+        "groups": [
+          {
+            "group": "Official Abilities",
+            "pages": [
+              "examples/audius-music-dj",
+              "examples/basic-advisor",
+              "examples/quiz-game",
+              "examples/weather",
+              "examples/perplexity-search"
+            ]
+          },
+          {
+            "group": "Community Showcase",
+            "pages": [
+              "examples/community-overview"
             ]
           }
         ]
       }
-    ],
-    "global": {
-      "anchors": [
-        {
-          "anchor": "Documentation",
-          "href": "https://mintlify.com/docs",
-          "icon": "book-open-cover"
-        },
-        {
-          "anchor": "Blog",
-          "href": "https://mintlify.com/blog",
-          "icon": "newspaper"
-        }
-      ]
-    }
-  },
-  "logo": {
-    "light": "/logo/light.svg",
-    "dark": "/logo/dark.svg"
-  },
-  "navbar": {
-    "links": [
-      {
-        "label": "Support",
-        "href": "mailto:hi@mintlify.com"
-      }
-    ],
-    "primary": {
-      "type": "button",
-      "label": "Dashboard",
-      "href": "https://dashboard.mintlify.com"
-    }
-  },
-  "contextual": {
-    "options": [
-     "copy",
-     "view",
-     "chatgpt",
-     "claude",
-     "perplexity",
-     "mcp",
-     "cursor",
-     "vscode"
-   ]
-  },
-  "footer": {
-    "socials": {
-      "x": "https://x.com/mintlify",
-      "github": "https://github.com/mintlify",
-      "linkedin": "https://linkedin.com/company/mintlify"
-    }
+    ]
   }
 }

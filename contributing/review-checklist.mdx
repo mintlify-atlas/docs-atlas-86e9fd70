@@ -1,0 +1,334 @@
+---
+title: Review Checklist
+description: Requirements your PR must meet to pass code review
+---
+
+Every community PR is reviewed against this checklist. Use it before submitting to ensure a smooth review process.
+
+## Hard Requirements (Must Pass)
+
+These are non-negotiable. Your PR will not be merged without meeting all of these:
+
+<Steps>
+  <Step title="PR targets dev branch">
+    Base branch must be `dev`, not `main`
+  </Step>
+  <Step title="Files in community folder">
+    All files must be in `community/your-ability-name/`, not in `official/`
+  </Step>
+  <Step title="Follows SDK pattern">
+    `main.py` extends `MatchingCapability` and has both `register_capability()` and `call()` methods
+  </Step>
+  <Step title="README included">
+    `README.md` present with description, suggested trigger words, and setup instructions
+  </Step>
+  <Step title="resume_normal_flow() called">
+    Must be called on every exit path (success, errors, user cancellation)
+  </Step>
+  <Step title="No print() statements">
+    Use `self.worker.editor_logging_handler.info()` instead
+  </Step>
+  <Step title="No blocked imports">
+    No usage of blocked imports (see full list below)
+  </Step>
+  <Step title="No asyncio sleep/create_task">
+    Use `self.worker.session_tasks.sleep()` and `.create()` instead
+  </Step>
+  <Step title="No hardcoded secrets">
+    Use `"YOUR_API_KEY_HERE"` placeholders and document in README
+  </Step>
+  <Step title="Error handling present">
+    All API calls and external operations wrapped in try/except blocks
+  </Step>
+</Steps>
+
+<Warning>
+  Failing any hard requirement will block your PR from merging until fixed.
+</Warning>
+
+## Blocked Imports and Keywords
+
+These imports and patterns are not allowed for security, isolation, and multi-tenant safety:
+
+| Blocked | Why | Use Instead |
+|---------|-----|-------------|
+| `print()` | Bypasses structured logging | `self.worker.editor_logging_handler` |
+| `open()` (raw) | Unmanaged filesystem access | `self.capability_worker.read_file()` / `write_file()` |
+| `redis` | Direct datastore coupling | Platform-provided helpers |
+| `connection_manager` | Breaks isolation & multi-tenant safety | `CapabilityWorker` APIs |
+| `user_config` | Can leak/mutate global state | `CapabilityWorker` / `worker` APIs |
+| `exec()` | Insecure dynamic code execution | Not allowed |
+| `eval()` | Insecure dynamic code execution | Not allowed |
+| `pickle` | Insecure deserialization | Use `json` instead |
+| `dill` | Insecure deserialization | Use `json` instead |
+| `shelve` | Insecure deserialization | Use `json` instead |
+| `marshal` | Insecure deserialization | Use `json` instead |
+| `asyncio.sleep()` | Session management bypass | `self.worker.session_tasks.sleep()` |
+| `asyncio.create_task()` | Session management bypass | `self.worker.session_tasks.create()` |
+
+<Note>
+  Full documentation: [Blocked Imports and Keywords](https://docs.openhome.com/how_to_build_an_ability#blocked-imports-and-keywords)
+</Note>
+
+### Common Violations
+
+<AccordionGroup>
+  <Accordion title="Using print() for debugging">
+    **Don't do this:**
+    ```python
+    print(f"User said: {user_input}")
+    ```
+    
+    **Do this instead:**
+    ```python
+    self.worker.editor_logging_handler.info(f"User said: {user_input}")
+    ```
+  </Accordion>
+  
+  <Accordion title="Direct file operations">
+    **Don't do this:**
+    ```python
+    with open('data.txt', 'r') as f:
+        data = f.read()
+    ```
+    
+    **Do this instead:**
+    ```python
+    data = await self.capability_worker.read_file('data.txt')
+    ```
+  </Accordion>
+  
+  <Accordion title="Using asyncio directly for delays">
+    **Don't do this:**
+    ```python
+    await asyncio.sleep(5)
+    ```
+    
+    **Do this instead:**
+    ```python
+    await self.worker.session_tasks.sleep(5)
+    ```
+  </Accordion>
+  
+  <Accordion title="Creating tasks without session management">
+    **Don't do this:**
+    ```python
+    asyncio.create_task(my_background_task())
+    ```
+    
+    **Do this instead:**
+    ```python
+    self.worker.session_tasks.create(my_background_task())
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## SDK Pattern Requirements
+
+Your ability must follow the correct SDK structure:
+
+### Required Class Structure
+
+```python
+class YourAbility(MatchingCapability):
+    def __init__(self, worker, user, ability_data):
+        super().__init__(worker, user, ability_data)
+        self.capability_worker = None
+    
+    @staticmethod
+    def register_capability():
+        # Copy from template - reads config.json
+        pass
+    
+    async def call(self):
+        # Set up worker and capability_worker
+        # Launch your async logic
+        # MUST call resume_normal_flow() on every exit
+        pass
+```
+
+### resume_normal_flow() on Every Exit
+
+This is one of the most common issues. Every path out of your ability must call `resume_normal_flow()`:
+
+<CodeGroup>
+```python Success Path
+async def call(self):
+    self.capability_worker = CapabilityWorker(self.worker)
+    
+    try:
+        await self.capability_worker.speak("Here's your result")
+    except Exception as e:
+        self.worker.editor_logging_handler.error(f"Error: {e}")
+    finally:
+        # ✓ Always called, even on error
+        self.capability_worker.resume_normal_flow()
+```
+
+```python Loop Exit
+async def run_loop(self):
+    while True:
+        response = await self.capability_worker.user_response()
+        
+        if "exit" in response.lower():
+            await self.capability_worker.speak("Goodbye!")
+            # ✓ Called before breaking
+            self.capability_worker.resume_normal_flow()
+            break
+```
+
+```python Error Path
+async def call(self):
+    self.capability_worker = CapabilityWorker(self.worker)
+    
+    try:
+        result = await risky_api_call()
+        await self.capability_worker.speak(f"Result: {result}")
+    except Exception as e:
+        await self.capability_worker.speak("Sorry, something went wrong")
+        self.worker.editor_logging_handler.error(f"Error: {e}")
+    finally:
+        # ✓ Called whether success or error
+        self.capability_worker.resume_normal_flow()
+```
+</CodeGroup>
+
+<Warning>
+  Missing `resume_normal_flow()` on any exit path will cause the AI to hang or behave unexpectedly after your ability runs.
+</Warning>
+
+## Nice to Have (Strongly Encouraged)
+
+These improve quality but won't block your PR:
+
+- [ ] Spoken responses are short and natural (1-2 sentences per `speak()` call)
+- [ ] Exit/stop handling in looping abilities ("exit", "stop", "cancel")
+- [ ] Inline comments explaining non-obvious logic
+- [ ] Follows patterns from [docs/patterns.md](https://github.com/openhome-dev/abilities/blob/dev/docs/patterns.md)
+- [ ] Graceful degradation when external services are unavailable
+- [ ] Helpful error messages for users when things go wrong
+
+<Note>
+  Remember: This is voice interaction, not text chat. Keep responses conversational and concise.
+</Note>
+
+## What We Don't Review For
+
+We explicitly don't block PRs for:
+
+- Whether an external API will keep working forever (APIs change - that's okay)
+- Whether it's the "best" possible implementation (good enough is good enough)
+- Future SDK compatibility (we'll help with migrations when needed)
+- Highly specific edge cases (we focus on common paths)
+
+## Common Issues and Fixes
+
+<AccordionGroup>
+  <Accordion title="Missing resume_normal_flow() on error path">
+    **Problem:** Only calling `resume_normal_flow()` in the success case
+    
+    **Fix:** Use a `finally` block to ensure it's always called:
+    ```python
+    try:
+        # your logic
+    except Exception as e:
+        # error handling
+    finally:
+        self.capability_worker.resume_normal_flow()  # Always runs
+    ```
+  </Accordion>
+  
+  <Accordion title="Hardcoded API keys in code">
+    **Problem:** `api_key = "sk-abc123xyz"`
+    
+    **Fix:** Use placeholders and document in README:
+    ```python
+    api_key = "YOUR_API_KEY_HERE"  # Replace with your actual key
+    ```
+    
+    Then in README:
+    ```markdown
+    ## Setup
+    1. Get an API key from [service.com/api]
+    2. Replace `YOUR_API_KEY_HERE` in main.py with your key
+    ```
+  </Accordion>
+  
+  <Accordion title="Long spoken responses">
+    **Problem:** Multi-paragraph responses that work in text but sound robotic when spoken
+    
+    **Fix:** Break into shorter, conversational chunks:
+    ```python
+    # Don't do this
+    await self.capability_worker.speak(
+        "Here's everything you need to know about this topic. "
+        "First, let me explain the background... [3 more paragraphs]"
+    )
+    
+    # Do this instead
+    await self.capability_worker.speak("Let me break this down for you.")
+    await self.capability_worker.speak("First, the key point is...")
+    response = await self.capability_worker.user_response(
+        "Want to hear more details?"
+    )
+    ```
+  </Accordion>
+  
+  <Accordion title="No error handling on API calls">
+    **Problem:** API calls with no try/except
+    
+    **Fix:** Always wrap external operations:
+    ```python
+    try:
+        response = await external_api.fetch(query)
+        if response.status == 200:
+            # handle success
+        else:
+            await self.capability_worker.speak("Sorry, the service is unavailable")
+    except Exception as e:
+        self.worker.editor_logging_handler.error(f"API error: {e}")
+        await self.capability_worker.speak("I'm having trouble connecting")
+    ```
+  </Accordion>
+  
+  <Accordion title="Files in wrong directory">
+    **Problem:** Submitted to `official/` or root directory
+    
+    **Fix:** All community contributions must be in:
+    ```
+    community/your-ability-name/
+    ├── main.py
+    ├── README.md
+    └── requirements.txt (if needed)
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Pre-Submission Self-Review
+
+Before submitting, go through this quick checklist:
+
+```markdown
+- [ ] Tested in Live Editor with multiple conversation paths
+- [ ] Tested "exit"/"stop" commands if it's a loop
+- [ ] Checked all exit paths call resume_normal_flow()
+- [ ] Searched code for print() - replaced with editor_logging_handler
+- [ ] Verified no blocked imports used
+- [ ] README has suggested trigger words and setup instructions
+- [ ] PR targets dev branch, not main
+- [ ] Branch is up to date with upstream/dev
+```
+
+## Getting Review Feedback
+
+When you receive review feedback:
+
+1. **Read the full review** - Reviewers often explain why changes are needed
+2. **Ask questions** - If something is unclear, ask in the PR comments
+3. **Make changes** - Push new commits to your branch (PR updates automatically)
+4. **Respond to comments** - Let reviewers know what you changed
+5. **Be patient** - Reviews can take 3-5 business days
+
+<Note>
+  Maintainers want to merge your PR! Review feedback is to ensure quality and security, not to block contributions.
+</Note>

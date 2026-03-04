@@ -1,80 +1,317 @@
 ---
 title: "Quickstart"
-description: "Start building awesome documentation in minutes"
+description: "Build and upload your first OpenHome ability in under 5 minutes"
 ---
 
-## Get started in three steps
+Build your first OpenHome Ability from scratch and see it running in under 5 minutes.
 
-Get your documentation site running locally and make your first customization.
+## What You'll Need
 
-### Step 1: Set up your local environment
+- An OpenHome account at [app.openhome.com](https://app.openhome.com)
+- A text editor
+- Basic Python knowledge
 
-<AccordionGroup>
-  <Accordion icon="copy" title="Clone your docs locally">
-    During the onboarding process, you created a GitHub repository with your docs content if you didn't already have one. You can find a link to this repository in your [dashboard](https://dashboard.mintlify.com).
-    
-    To clone the repository locally so that you can make and preview changes to your docs, follow the [Cloning a repository](https://docs.github.com/en/repositories/creating-and-managing-repositories/cloning-a-repository) guide in the GitHub docs.
-  </Accordion>
-  <Accordion icon="rectangle-terminal" title="Start the preview server">
-    1. Install the Mintlify CLI: `npm i -g mint`
-    2. Navigate to your docs directory and run: `mint dev`
-    3. Open `http://localhost:3000` to see your docs live!
-    
-    <Tip>Your preview updates automatically as you edit files.</Tip>
-  </Accordion>
-</AccordionGroup>
+<Steps>
 
-### Step 2: Deploy your changes
+<Step title="Clone the repository and pick a template">
 
-<AccordionGroup>
-  <Accordion icon="github" title="Install our GitHub app">
-    Install the Mintlify GitHub app from your [dashboard](https://dashboard.mintlify.com/settings/organization/github-app).
-    
-    Our GitHub app automatically deploys your changes to your docs site, so you don't need to manage deployments yourself.
-</Accordion>
-<Accordion icon="palette" title="Update your site name and colors">
-    For a first change, let's update the name and colors of your docs site.
+Clone the abilities repository and copy the basic template:
 
-    1. Open `docs.json` in your editor.
-    2. Change the `"name"` field to your project name.
-    3. Update the `"colors"` to match your brand.
-    4. Save and see your changes instantly at `http://localhost:3000`.
+```bash
+git clone https://github.com/openhome-dev/abilities.git
+cp -r abilities/templates/basic-template my-first-ability
+cd my-first-ability
+```
 
-    <Tip>Try changing the primary color to see an immediate difference!</Tip>
-  </Accordion>
-</AccordionGroup>
+You now have one file to edit: `main.py` — your entire Ability logic lives here.
 
-### Step 3: Go live
+</Step>
 
-<Accordion icon="rocket" title="Publish your docs">
-  1. Commit and push your changes.
-  2. Your docs will update and be live in moments!
-</Accordion>
+<Step title="Understand the basic structure">
 
-## Next steps
+Open `main.py`. Every Ability follows this pattern:
 
-Now that you have your docs running, explore these key features:
+```python
+import json
+from src.agent.capability import MatchingCapability
+from src.main import AgentWorker
+from src.agent.capability_worker import CapabilityWorker
+
+class BasicTemplateCapability(MatchingCapability):
+    worker: AgentWorker = None
+    capability_worker: CapabilityWorker = None
+
+    #{{register capability}}
+
+    async def run(self):
+        # Your logic goes here
+        pass
+
+    def call(self, worker: AgentWorker):
+        # Initialize the worker and capability worker
+        self.worker = worker
+        self.capability_worker = CapabilityWorker(self)
+
+        # Start the template functionality
+        self.worker.session_tasks.create(self.run())
+```
+
+<Note>
+The `#{{register capability}}` comment is required boilerplate — copy it exactly. The platform uses this tag to automatically register your Ability. You never need to create or edit `config.json` manually.
+</Note>
+
+</Step>
+
+<Step title="Edit the run() method">
+
+The `run()` method contains your Ability's logic. Here's the complete basic template:
+
+```python
+async def run(self):
+    """
+    The main function for the basic template capability.
+    It greets the user, listens for their response, generates a reply, and asks for feedback.
+    """
+
+    # 1. SPEAK - Greet the user
+    await self.capability_worker.speak("Hi! How can I help you today?")
+
+    # 2. LISTEN - Get the user's response
+    user_input = await self.capability_worker.user_response()
+
+    # 3. RESPOND - Generate a response using the LLM
+    response_prompt = f"Give a short, helpful response to: {user_input}"
+    response = self.capability_worker.text_to_text_response(response_prompt)
+
+    # Speak the response and ask for feedback
+    response_with_feedback = response + " Are you satisfied with the response?"
+    user_feedback = await self.capability_worker.run_io_loop(response_with_feedback)
+
+    # Thank the user and exit
+    await self.capability_worker.speak("Thank you for using the advisor. Goodbye!")
+
+    # IMPORTANT: Always call this when done
+    self.capability_worker.resume_normal_flow()
+```
+
+### The Three Core Parts
+
+Every Ability follows this pattern:
+
+<CodeGroup>
+
+```python Speak
+# Use speak() to send text-to-speech to the user
+await self.capability_worker.speak("Hello! What can I do for you?")
+```
+
+```python Listen
+# Use user_response() to wait for the user's input
+user_input = await self.capability_worker.user_response()
+```
+
+```python Respond
+# Use text_to_text_response() to generate LLM responses
+# Note: This is the ONLY synchronous method - no await!
+response = self.capability_worker.text_to_text_response(
+    f"Help the user with: {user_input}"
+)
+await self.capability_worker.speak(response)
+```
+
+</CodeGroup>
+
+<Warning>
+Always call `self.capability_worker.resume_normal_flow()` when your Ability is done. Without it, the Agent goes silent and the user has to restart the conversation.
+</Warning>
+
+</Step>
+
+<Step title="Zip and upload to OpenHome">
+
+1. Zip your folder:
+   ```bash
+   cd ..
+   zip -r my-first-ability.zip my-first-ability/
+   ```
+
+2. Go to [app.openhome.com](https://app.openhome.com)
+3. Navigate to **Abilities** → **Add Custom Ability**
+4. Upload your `.zip` file
+5. Fill in the name and description
+6. Set your **trigger words** — the phrases that will activate your Ability (e.g., "help me", "give advice")
+
+<Note>
+Trigger words are configured in the OpenHome dashboard when you upload an Ability, not in the code itself.
+</Note>
+
+</Step>
+
+<Step title="Test in the Live Editor">
+
+After uploading, click **Live Editor** on your Ability. Here you can:
+
+- Edit files directly in the browser
+- Click **Start Live Test** to test your Ability
+- Check trigger words
+- View logs in real time
+- Commit changes when satisfied
+
+Test by saying one of your trigger phrases, and your Ability will activate.
+
+</Step>
+
+</Steps>
+
+## Available SDK Methods
+
+The `CapabilityWorker` class provides all I/O methods for your Ability:
+
+| Method | Type | Description |
+|--------|------|-------------|
+| `speak(text)` | async | Text-to-speech using the Agent's default voice |
+| `user_response()` | async | Wait for user input, returns string |
+| `run_io_loop(text)` | async | Speak + listen in one call |
+| `run_confirmation_loop(text)` | async | Ask yes/no question, returns bool |
+| `text_to_text_response(prompt, history, system_prompt)` | **sync** | Generate LLM response (no await!) |
+| `play_audio(file_content)` | async | Play audio from bytes |
+| `play_from_audio_file(filename)` | async | Play audio file from Ability folder |
+| `resume_normal_flow()` | sync | **Required** - return control to Agent |
+
+## Type Signatures
+
+```python
+# Core imports
+from src.agent.capability import MatchingCapability
+from src.main import AgentWorker
+from src.agent.capability_worker import CapabilityWorker
+
+# Speaking
+async def speak(text: str) -> None
+async def text_to_speech(text: str, voice_id: str) -> None
+
+# Listening
+async def user_response() -> str
+async def wait_for_complete_transcription() -> str
+
+# Combined
+async def run_io_loop(text: str) -> str
+async def run_confirmation_loop(text: str) -> bool
+
+# LLM (synchronous!)
+def text_to_text_response(
+    prompt_text: str,
+    history: list = [],
+    system_prompt: str = ""
+) -> str
+
+# Audio
+async def play_audio(file_content: bytes) -> None
+async def play_from_audio_file(file_name: str) -> None
+
+# Flow control
+def resume_normal_flow() -> None
+async def send_interrupt_signal() -> None
+
+# Logging (via self.worker)
+self.worker.editor_logging_handler.info(message: str)
+self.worker.editor_logging_handler.error(message: str)
+self.worker.editor_logging_handler.warning(message: str)
+```
+
+## Common Patterns
+
+<CodeGroup>
+
+```python Simple One-Shot
+async def run(self):
+    await self.capability_worker.speak("What would you like to know?")
+    user_input = await self.capability_worker.user_response()
+    response = self.capability_worker.text_to_text_response(
+        f"Answer briefly: {user_input}"
+    )
+    await self.capability_worker.speak(response)
+    self.capability_worker.resume_normal_flow()
+```
+
+```python Conversation Loop
+EXIT_WORDS = {"stop", "exit", "quit", "done"}
+
+async def run(self):
+    await self.capability_worker.speak("I'm ready. Say stop when done.")
+    while True:
+        user_input = await self.capability_worker.user_response()
+        if any(w in user_input.lower() for w in EXIT_WORDS):
+            await self.capability_worker.speak("Goodbye!")
+            break
+        response = self.capability_worker.text_to_text_response(
+            f"Respond to: {user_input}"
+        )
+        await self.capability_worker.speak(response)
+    self.capability_worker.resume_normal_flow()
+```
+
+```python API Call
+import requests
+
+async def run(self):
+    await self.capability_worker.speak("Let me look that up.")
+    try:
+        resp = requests.get("https://api.example.com/data")
+        if resp.status_code == 200:
+            data = resp.json()
+            summary = self.capability_worker.text_to_text_response(
+                f"Summarize for voice: {data}"
+            )
+            await self.capability_worker.speak(summary)
+        else:
+            await self.capability_worker.speak("Couldn't get that data.")
+    except Exception as e:
+        self.worker.editor_logging_handler.error(f"API error: {e}")
+        await self.capability_worker.speak("Something went wrong.")
+    self.capability_worker.resume_normal_flow()
+```
+
+</CodeGroup>
+
+## Next Steps
 
 <CardGroup cols={2}>
 
-<Card title="Write Content" icon="pen-to-square" href="/essentials/markdown">
-  Learn MDX syntax and start writing your documentation.
+<Card title="Explore Templates" icon="flask" href="/building/templates">
+  Start with pre-built patterns for API calls, loops, audio, and more
 </Card>
 
-<Card title="Customize style" icon="palette" href="/essentials/settings">
-  Make your docs match your brand perfectly.
+<Card title="API Reference" icon="code" href="/api/capability-worker">
+  Complete SDK documentation with all methods and examples
 </Card>
 
-<Card title="Add code examples" icon="square-code" href="/essentials/code">
-  Include syntax-highlighted code blocks.
+<Card title="Pattern Examples" icon="book" href="/building/patterns">
+  Copy-paste examples for common use cases
 </Card>
 
-<Card title="API documentation" icon="code" href="/api-reference/introduction">
-  Auto-generate API docs from OpenAPI specs.
+<Card title="Contributing Guide" icon="upload" href="/contributing/overview">
+  Share your Ability with the OpenHome community
 </Card>
 
 </CardGroup>
 
+## Important Notes
+
+<Warning>
+**Common Mistakes to Avoid:**
+
+- Forgetting to call `resume_normal_flow()` (Agent gets stuck)
+- Using `await` on `text_to_text_response()` (it's synchronous!)
+- Using `print()` instead of `self.worker.editor_logging_handler.info()`
+- Using `asyncio.sleep()` instead of `self.worker.session_tasks.sleep()`
+</Warning>
+
 <Note>
-  **Need help?** See our [full documentation](https://mintlify.com/docs) or join our [community](https://mintlify.com/community).
+**Pro Tips:**
+
+- Always log before and after API calls for easier debugging
+- Use the Live Editor to test changes without re-uploading
+- Check conversation history with `get_full_message_history()` for context-aware responses
+- Use persistent file storage to remember user preferences across sessions
 </Note>

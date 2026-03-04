@@ -1,0 +1,428 @@
+---
+title: "Testing Abilities"
+description: "How to test and debug your OpenHome abilities locally and in production"
+---
+
+Learn how to test your abilities locally, in the Live Editor, and in production.
+
+---
+
+## Local Development
+
+### 1. File Structure
+
+Your ability should have at minimum:
+
+```
+my-ability/
+├── main.py          # Required: Entry point for Skills
+├── watcher.py       # Optional: Background daemon
+├── requirements.txt # Optional: Python dependencies
+└── assets/          # Optional: Audio files, data files
+```
+
+<Note>
+The platform automatically generates `config.json` at runtime based on your trigger words. You never need to create or edit it manually.
+</Note>
+
+---
+
+### 2. Code Validation
+
+Before uploading, verify your code locally:
+
+<Steps>
+  <Step title="Check imports">
+    Make sure all imports are available in the OpenHome sandbox:
+    
+    ```python
+    # ✅ Allowed
+    import json
+    import requests
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+    
+    # ❌ Not available in sandbox
+    import numpy  # Not in sandbox
+    import torch  # Not in sandbox
+    ```
+    
+    The OpenHome sandbox has restricted package access for security.
+  </Step>
+  
+  <Step title="Verify async/await usage">
+    All SDK methods are async. Make sure you're using `await`:
+    
+    ```python
+    # ❌ Wrong
+    self.capability_worker.speak("Hello")
+    
+    # ✅ Correct
+    await self.capability_worker.speak("Hello")
+    ```
+  </Step>
+  
+  <Step title="Check resume_normal_flow() placement">
+    Every Skill must call `resume_normal_flow()` exactly once at the end:
+    
+    ```python
+    async def run(self):
+        await self.capability_worker.speak("Done!")
+        self.capability_worker.resume_normal_flow()  # Required
+    ```
+    
+    Daemons should **never** call `resume_normal_flow()`.
+  </Step>
+</Steps>
+
+---
+
+## Packaging and Upload
+
+### Creating the ZIP File
+
+<CodeGroup>
+```bash macOS/Linux
+cd my-ability
+zip -r my-ability.zip .
+```
+
+```bash Windows (PowerShell)
+cd my-ability
+Compress-Archive -Path * -DestinationPath my-ability.zip
+```
+</CodeGroup>
+
+<Tip>
+Make sure you're zipping the **contents** of the folder, not the folder itself. The ZIP should contain `main.py` at the root level, not `my-ability/main.py`.
+</Tip>
+
+---
+
+### Uploading to OpenHome
+
+<Steps>
+  <Step title="Navigate to Abilities">
+    Go to [app.openhome.com](https://app.openhome.com) and click **Abilities** in the sidebar.
+  </Step>
+  
+  <Step title="Add Custom Ability">
+    Click **Add Custom Ability** and upload your ZIP file.
+  </Step>
+  
+  <Step title="Configure metadata">
+    Fill in:
+    - **Name**: Display name for your ability
+    - **Description**: What it does
+    - **Trigger words**: Phrases that activate it (e.g., "send email", "check weather")
+  </Step>
+  
+  <Step title="Save and test">
+    Click **Save** to upload. Your ability is now available for testing.
+  </Step>
+</Steps>
+
+---
+
+## Testing in Live Editor
+
+The Live Editor lets you test and debug abilities in real-time.
+
+### Opening Live Editor
+
+1. Go to **Abilities** → find your ability
+2. Click **Live Editor**
+3. You'll see your code and a test interface
+
+### Testing Workflow
+
+<Steps>
+  <Step title="Start Live Test">
+    Click **Start Live Test** to activate your ability in a test session.
+  </Step>
+  
+  <Step title="Trigger the ability">
+    Say one of your trigger words to activate it. The system will route to your ability.
+  </Step>
+  
+  <Step title="Watch logs">
+    The right panel shows real-time logs from your ability:
+    
+    ```python
+    self.worker.editor_logging_handler.info("Debug message")
+    self.worker.editor_logging_handler.error("Error occurred")
+    ```
+  </Step>
+  
+  <Step title="Iterate">
+    Make changes in the editor, click **Save**, and test again. No need to re-upload the ZIP.
+  </Step>
+</Steps>
+
+<Warning>
+Live Editor changes are **temporary**. Click **Commit Changes** to make them permanent.
+</Warning>
+
+---
+
+## Testing Trigger Words
+
+### How Trigger Words Work
+
+OpenHome uses two routing mechanisms:
+
+1. **Exact hotword matching**: User says exact trigger phrase → ability activates
+2. **LLM routing**: Brain analyzes intent and routes to best ability
+
+<Accordion title="Example: Trigger word matching">
+If your trigger words are:
+- "send email"
+- "email someone"
+
+These will activate:
+- "Hey, send email" ✅
+- "I need to email someone" ✅
+- "Can you help me send an email?" ✅ (LLM routing)
+
+These might not:
+- "Check my inbox" ❌ (unless LLM routes it)
+- "Mail something" ❌ (no keyword match)
+</Accordion>
+
+### Best Practices for Trigger Words
+
+<Steps>
+  <Step title="Use natural phrases">
+    Write how people actually speak:
+    - ✅ "set an alarm", "wake me up at"
+    - ❌ "alarm.set", "execute_alarm_capability"
+  </Step>
+  
+  <Step title="Add variations">
+    Include different ways to say the same thing:
+    - "play music"
+    - "start playing a song"
+    - "I want to listen to music"
+  </Step>
+  
+  <Step title="Avoid conflicts">
+    Don't overlap with common phrases used by other abilities or the base agent.
+  </Step>
+</Steps>
+
+---
+
+## Debugging Common Issues
+
+### Ability Never Activates
+
+<Accordion title="Check trigger words">
+Make sure your trigger words are set correctly:
+1. Go to Abilities → Your Ability → Edit
+2. Check the "Trigger Words" field
+3. Try more explicit phrases
+</Accordion>
+
+<Accordion title="Check agent configuration">
+Make sure the ability is enabled for your agent:
+1. Go to Agents → Your Agent → Edit
+2. Check that your ability is in the enabled abilities list
+</Accordion>
+
+---
+
+### Ability Activates but Fails Silently
+
+<Accordion title="Check logs">
+Open Live Editor and check logs for errors:
+```python
+self.worker.editor_logging_handler.error(f"Error: {e}")
+```
+</Accordion>
+
+<Accordion title="Verify resume_normal_flow()">
+If the agent stops responding after your ability runs, you likely forgot:
+```python
+self.capability_worker.resume_normal_flow()
+```
+</Accordion>
+
+<Accordion title="Check async/await">
+Make sure all SDK calls use `await`:
+```python
+# ❌ Wrong - will fail silently
+self.capability_worker.speak("Hello")
+
+# ✅ Correct
+await self.capability_worker.speak("Hello")
+```
+</Accordion>
+
+---
+
+### Audio Doesn't Play
+
+<Accordion title="Check file paths">
+Audio files must be in your ZIP and referenced correctly:
+```python
+# ✅ Correct (file is in ZIP root)
+await self.capability_worker.play_from_audio_file("alarm.mp3")
+
+# ✅ Correct (file is in assets/ folder)
+await self.capability_worker.play_from_audio_file("assets/alarm.mp3")
+```
+</Accordion>
+
+<Accordion title="Verify file format">
+Supported formats: MP3, WAV, OGG
+</Accordion>
+
+---
+
+### API Calls Fail
+
+<Accordion title="Check network access">
+Make sure the API is accessible from the cloud sandbox. Local APIs won't work unless you use `exec_local_command()`.
+</Accordion>
+
+<Accordion title="Add error handling">
+```python
+try:
+    resp = requests.get(API_URL)
+    resp.raise_for_status()
+except requests.exceptions.RequestException as e:
+    self.worker.editor_logging_handler.error(f"API error: {e}")
+    await self.capability_worker.speak("Sorry, that service is unavailable.")
+```
+</Accordion>
+
+---
+
+### Daemon Never Starts
+
+<Accordion title="Check file name">
+Background daemons must be in a file named `watcher.py`.
+</Accordion>
+
+<Accordion title="Check call() signature">
+```python
+# ✅ Correct for daemon
+def call(self, worker: AgentWorker, background_daemon_mode: bool):
+    self.worker = worker
+    self.background_daemon_mode = background_daemon_mode
+    self.capability_worker = CapabilityWorker(self.worker)
+    self.worker.session_tasks.create(self.first_function())
+```
+</Accordion>
+
+<Accordion title="Check while loop">
+Daemons should run in an infinite loop:
+```python
+async def first_function(self):
+    while True:
+        # Do work
+        await self.worker.session_tasks.sleep(5.0)
+```
+</Accordion>
+
+---
+
+## Production Testing
+
+### Test with Real Users
+
+Once you've validated in Live Editor:
+
+<Steps>
+  <Step title="Commit changes">
+    Click **Commit Changes** in Live Editor to make your code permanent.
+  </Step>
+  
+  <Step title="Enable for agent">
+    Make sure the ability is enabled in your Agent configuration.
+  </Step>
+  
+  <Step title="Test in real conversations">
+    Start a normal conversation and trigger your ability naturally.
+  </Step>
+  
+  <Step title="Monitor logs">
+    Check the Live Editor logs periodically for any errors in production.
+  </Step>
+</Steps>
+
+---
+
+## Performance Testing
+
+### Response Time
+
+- **Target**: Abilities should respond within 2-3 seconds
+- **Test**: Use logging to measure execution time:
+
+```python
+import time
+
+start = time.time()
+# Your logic here
+elapsed = time.time() - start
+self.worker.editor_logging_handler.info(f"Execution time: {elapsed:.2f}s")
+```
+
+### Memory Usage
+
+- Avoid loading large datasets into memory
+- Stream large API responses
+- Clean up resources in `finally` blocks
+
+---
+
+## Testing Checklist
+
+<Steps>
+  <Step title="Code validation">
+    - [ ] All SDK calls use `await`
+    - [ ] `resume_normal_flow()` called in Skills
+    - [ ] No `resume_normal_flow()` in daemons
+    - [ ] Proper error handling
+    - [ ] Logging added for debugging
+  </Step>
+  
+  <Step title="Local testing">
+    - [ ] ZIP file created correctly
+    - [ ] All files included
+    - [ ] Trigger words configured
+  </Step>
+  
+  <Step title="Live Editor testing">
+    - [ ] Ability activates on trigger words
+    - [ ] Logs show expected behavior
+    - [ ] No silent failures
+    - [ ] Audio plays correctly (if applicable)
+  </Step>
+  
+  <Step title="Production validation">
+    - [ ] Works in real conversations
+    - [ ] Response time acceptable
+    - [ ] No errors in production logs
+  </Step>
+</Steps>
+
+---
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Best Practices" icon="star" href="/building/best-practices">
+    Learn voice UX and security best practices
+  </Card>
+  <Card title="Common Patterns" icon="code" href="/building/patterns">
+    Reusable patterns for common tasks
+  </Card>
+  <Card title="SDK Reference" icon="book" href="/api/capability-worker">
+    Complete CapabilityWorker documentation
+  </Card>
+  <Card title="Best Practices" icon="star" href="/building/best-practices">
+    Voice UX, error handling, and security guidelines
+  </Card>
+</CardGroup>

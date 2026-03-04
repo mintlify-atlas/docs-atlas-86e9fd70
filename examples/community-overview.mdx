@@ -1,0 +1,240 @@
+---
+title: 'Community Showcase'
+description: 'Explore abilities built by the OpenHome community'
+icon: 'users'
+---
+
+## Welcome to the Community
+
+The OpenHome community has built an incredible collection of abilities that extend your AI assistant in creative and practical ways. From productivity tools to entertainment features, these community-contributed abilities showcase the power and flexibility of the OpenHome platform.
+
+<Note>
+  Community abilities are maintained by their authors and are not officially supported by OpenHome. For production use, thoroughly test any ability before deployment.
+</Note>
+
+## Featured Community Abilities
+
+### Productivity & Communication
+
+<CardGroup cols={2}>
+  <Card title="GitHub Voice Manager" icon="github" href="https://github.com/openhome-dev/abilities/tree/main/community/github-voice-manager">
+    Check notifications, list pull requests, browse issues, and get status summaries — all hands-free. Requires GitHub Personal Access Token.
+  </Card>
+  
+  <Card title="Discord Connector" icon="discord" href="https://github.com/openhome-dev/abilities/tree/main/community/discord-connector">
+    Read messages, post updates, get channel digests, and switch channels by voice. Uses Discord Bot API.
+  </Card>
+  
+  <Card title="Twilio SMS & Voice" icon="phone" href="https://github.com/openhome-dev/abilities/tree/main/community/Twilio-SMS">
+    Send SMS messages, place voice calls with TTS, read incoming texts, and check call history. Requires Twilio account.
+  </Card>
+  
+  <Card title="Grocery List Manager" icon="cart-shopping" href="https://github.com/openhome-dev/abilities/tree/main/community/grocery-list-manager">
+    Add, remove, read, and clear items from a shared household grocery list entirely by voice. Perfect for cooking.
+  </Card>
+</CardGroup>
+
+### Information & News
+
+<CardGroup cols={2}>
+  <Card title="Daily Briefing" icon="newspaper" href="https://github.com/openhome-dev/abilities/tree/main/community/daily-briefing">
+    Get a 30-second morning summary with weather, inspirational quote, and fun fact — all in natural conversation.
+  </Card>
+  
+  <Card title="Crypto Insight" icon="bitcoin-sign" href="https://github.com/openhome-dev/abilities/tree/main/community/crypto-insight">
+    Live crypto and gold prices with RSI analysis, trend insights, and voice-optimized output. Uses CoinLore API.
+  </Card>
+  
+  <Card title="Astronomy Guide" icon="star" href="https://github.com/openhome-dev/abilities/tree/main/community/astronomy-guide">
+    Moon phases, sunrise/sunset times, planet visibility, and NASA's Astronomy Picture of the Day.
+  </Card>
+  
+  <Card title="Air Quality Checker" icon="wind" href="https://github.com/openhome-dev/abilities/tree/main/community/air-quality-checker">
+    Check air quality index (AQI) and pollution levels for any location worldwide.
+  </Card>
+</CardGroup>
+
+### Entertainment
+
+<CardGroup cols={2}>
+  <Card title="Dad Joke Teller" icon="face-laugh" href="https://github.com/openhome-dev/abilities/tree/main/community/dad-joke-teller">
+    Endless dad jokes on demand from the free icanhazdadjoke.com API. Say "another" to keep them coming.
+  </Card>
+  
+  <Card title="Coin Flipper" icon="coins" href="https://github.com/openhome-dev/abilities/tree/main/community/coin-flipper">
+    Make decisions easy with a simple voice-activated coin flip. Heads or tails?
+  </Card>
+</CardGroup>
+
+### Developer Tools
+
+<CardGroup cols={2}>
+  <Card title="Coding Agent Runner" icon="code" href="https://github.com/openhome-dev/abilities/tree/main/community/coding-agent-runner">
+    Execute code snippets and get results by voice. Useful for quick calculations and testing.
+  </Card>
+  
+  <Card title="Dev Standup Assistant" icon="clipboard-check" href="https://github.com/openhome-dev/abilities/tree/main/community/dev-standup-assistant">
+    Prepare and deliver your daily standup report with yesterday's work, today's plan, and blockers.
+  </Card>
+</CardGroup>
+
+## How to Explore Community Abilities
+
+<Steps>
+  <Step title="Browse the Repository">
+    Visit the [community folder](https://github.com/openhome-dev/abilities/tree/main/community) on GitHub to see all available abilities.
+  </Step>
+  
+  <Step title="Read the README">
+    Each ability has a README.md with:
+    - Description of what it does
+    - Suggested trigger words
+    - Setup instructions
+    - API requirements (if any)
+    - Example conversations
+  </Step>
+  
+  <Step title="Copy to Your Project">
+    Copy the ability folder to your OpenHome abilities directory and follow the setup instructions.
+  </Step>
+  
+  <Step title="Test Thoroughly">
+    Test the ability in the [OpenHome Live Editor](https://app.openhome.com/dashboard/abilities) before deploying to production.
+  </Step>
+</Steps>
+
+## Contributing Your Own Ability
+
+Have an idea for a new ability? We'd love to see it!
+
+<CardGroup cols={2}>
+  <Card title="Read the Guide" icon="book" href="https://github.com/openhome-dev/abilities/blob/main/CONTRIBUTING.md">
+    Full contribution guidelines with code standards and best practices
+  </Card>
+  
+  <Card title="Use a Template" icon="file-code" href="https://github.com/openhome-dev/abilities/tree/main/templates">
+    Start with a pre-built template to speed up development
+  </Card>
+  
+  <Card title="Submit a PR" icon="code-pull-request" href="https://github.com/openhome-dev/abilities/pulls">
+    Submit your ability to the `dev` branch for community review
+  </Card>
+  
+  <Card title="Share Ideas" icon="lightbulb" href="https://github.com/openhome-dev/abilities/discussions">
+    Discuss ability ideas and get feedback from the community
+  </Card>
+</CardGroup>
+
+### Contribution Checklist
+
+Before submitting, make sure your ability:
+
+<Accordion title="Code Quality">
+- Extends `MatchingCapability`
+- Includes `#{{register_capability}}` boilerplate
+- Calls `resume_normal_flow()` on every exit path
+- Has no `print()` statements (use `editor_logging_handler`)
+- Has no hardcoded API keys
+- All `requests.*()` calls include a `timeout` parameter
+</Accordion>
+
+<Accordion title="Documentation">
+- Includes a `README.md` with:
+  - Clear description
+  - Suggested trigger words
+  - Setup instructions
+  - Example conversation
+- Code is well-commented
+- Complex logic is explained
+</Accordion>
+
+<Accordion title="Testing">
+- Tested in the OpenHome Live Editor
+- All exit paths verified
+- Error handling tested
+- API rate limits considered
+</Accordion>
+
+## Path to Official Status
+
+Outstanding community abilities can be promoted to official status. Here's what we look for:
+
+<CardGroup cols={3}>
+  <Card title="Quality" icon="star">
+    Clean code, proper error handling, and comprehensive documentation
+  </Card>
+  
+  <Card title="Utility" icon="screwdriver-wrench">
+    Solves a common problem or provides significant value to users
+  </Card>
+  
+  <Card title="Maintenance" icon="wrench">
+    Author responds to issues and keeps the ability updated
+  </Card>
+</CardGroup>
+
+<Tip>
+  Official abilities get featured in the OpenHome dashboard and receive dedicated support from the core team.
+</Tip>
+
+## Community Guidelines
+
+<AccordionGroup>
+  <Accordion title="Be Respectful">
+    Treat all contributors with respect in PR reviews and discussions. Constructive feedback is welcome; personal attacks are not.
+  </Accordion>
+  
+  <Accordion title="Don't Modify Others' Work">
+    Don't modify other contributors' abilities without their consent. Submit suggestions as issues or discussions first.
+  </Accordion>
+  
+  <Accordion title="Report Issues">
+    Found a bug? Report it via [GitHub Issues](https://github.com/openhome-dev/abilities/issues) with clear reproduction steps.
+  </Accordion>
+  
+  <Accordion title="Share Knowledge">
+    Help newcomers learn by answering questions and sharing your expertise in discussions.
+  </Accordion>
+</AccordionGroup>
+
+## Get Involved
+
+<CardGroup cols={2}>
+  <Card title="Discord Community" icon="discord" href="https://discord.gg/openhome">
+    Join our Discord server to chat with other developers and get help
+  </Card>
+  
+  <Card title="GitHub Discussions" icon="comments" href="https://github.com/openhome-dev/abilities/discussions">
+    Share ideas, ask questions, and showcase your work
+  </Card>
+  
+  <Card title="Report Issues" icon="bug" href="https://github.com/openhome-dev/abilities/issues">
+    Found a bug? Let us know so we can fix it
+  </Card>
+  
+  <Card title="Request Features" icon="star" href="https://github.com/openhome-dev/abilities/discussions/categories/ability-ideas">
+    Suggest new ability ideas for the community to build
+  </Card>
+</CardGroup>
+
+<Note>
+  The community is the heart of OpenHome. Your contributions, feedback, and creativity make the platform better for everyone.
+</Note>
+
+## More Examples
+
+Explore the [full community folder](https://github.com/openhome-dev/abilities/tree/main/community) to discover even more abilities:
+
+- **Bedtime Wind Down** - Relaxing bedtime routine with meditation and sleep sounds
+- **Flight Price Checker** - Track flight prices and get alerts on deals
+- **Food & Water Log** - Track daily nutrition and hydration by voice
+- **Earthquake Monitor** - Get alerts about recent earthquakes worldwide
+- **HubSpot Integration** - Manage CRM contacts and deals by voice
+- **Microsoft Mail** - Read, send, and manage emails hands-free
+- **Weather Pro** - Advanced weather forecasts with hourly breakdowns
+
+...and many more!
+
+<Tip>
+  Sort the community folder by "Recently updated" to discover the newest abilities.
+</Tip>

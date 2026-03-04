@@ -1,0 +1,454 @@
+---
+title: "Common Patterns"
+description: "Reusable code patterns for building OpenHome abilities"
+---
+
+Common patterns for building Abilities. Copy and adapt these to your needs.
+
+---
+
+## Pattern 1: Simple One-Shot
+
+Ask → respond → done. The simplest pattern.
+
+<CodeGroup>
+```python One-shot Q&A
+async def run(self):
+    await self.capability_worker.speak("What would you like to know?")
+    user_input = await self.capability_worker.user_response()
+    
+    response = self.capability_worker.text_to_text_response(
+        f"Answer briefly: {user_input}"
+    )
+    
+    await self.capability_worker.speak(response)
+    self.capability_worker.resume_normal_flow()
+```
+</CodeGroup>
+
+**Use cases:** Quick facts, simple calculations, single-turn Q&A
+
+---
+
+## Pattern 2: Conversation Loop with Exit
+
+Interactive back-and-forth until the user says "stop".
+
+<CodeGroup>
+```python Conversation loop
+EXIT_WORDS = {"stop", "exit", "quit", "done", "cancel", "bye"}
+
+async def run(self):
+    await self.capability_worker.speak("I'm ready. Say stop when you're done.")
+    
+    while True:
+        user_input = await self.capability_worker.user_response()
+        
+        if not user_input:
+            continue
+        
+        if any(w in user_input.lower() for w in EXIT_WORDS):
+            await self.capability_worker.speak("Goodbye!")
+            break
+        
+        response = self.capability_worker.text_to_text_response(
+            f"Respond briefly: {user_input}"
+        )
+        await self.capability_worker.speak(response)
+    
+    self.capability_worker.resume_normal_flow()
+```
+</CodeGroup>
+
+<Tip>
+Always provide a clear exit path and tell the user how to exit at the beginning.
+</Tip>
+
+**Use cases:** Coaching sessions, tutoring, brainstorming assistants
+
+---
+
+## Pattern 3: External API Call
+
+Fetch data from an API and speak the result.
+
+<CodeGroup>
+```python API integration
+import requests
+
+async def run(self):
+    await self.capability_worker.speak("Let me look that up.")
+    
+    try:
+        resp = requests.get(
+            "https://api.example.com/data",
+            params={"q": "query"}
+        )
+        
+        if resp.status_code == 200:
+            data = resp.json()
+            summary = self.capability_worker.text_to_text_response(
+                f"Summarize for voice in one sentence: {data}"
+            )
+            await self.capability_worker.speak(summary)
+        else:
+            await self.capability_worker.speak(
+                "Sorry, I couldn't get that data."
+            )
+    except Exception as e:
+        self.worker.editor_logging_handler.error(f"API error: {e}")
+        await self.capability_worker.speak("Something went wrong.")
+    
+    self.capability_worker.resume_normal_flow()
+```
+</CodeGroup>
+
+<Warning>
+Always handle API errors gracefully. Never let exceptions crash your ability silently.
+</Warning>
+
+**Use cases:** Weather lookups, stock prices, news summaries, database queries
+
+---
+
+## Pattern 4: Yes/No Confirmation
+
+Use the built-in confirmation loop.
+
+<CodeGroup>
+```python Confirmation
+async def run(self):
+    confirmed = await self.capability_worker.run_confirmation_loop(
+        "Would you like me to set a timer for 5 minutes?"
+    )
+    
+    if confirmed:
+        await self.capability_worker.speak("Timer set!")
+        # Perform action
+    else:
+        await self.capability_worker.speak("No problem.")
+    
+    self.capability_worker.resume_normal_flow()
+```
+</CodeGroup>
+
+**Use cases:** Destructive actions, sending emails, making purchases, scheduling events
+
+<Tip>
+Always confirm before performing irreversible actions or actions that affect external systems.
+</Tip>
+
+---
+
+## Pattern 5: LLM as Intent Router
+
+Use the LLM to classify what the user wants, then branch.
+
+<CodeGroup>
+```python Intent classification
+import json
+
+def classify_intent(self, user_input: str) -> dict:
+    prompt = (
+        f"Classify this input into one of: CREATE, MODIFY, EXIT, CHAT.\n"
+        f"Return ONLY JSON: {{\"intent\": \"string\", \"confidence\": float}}\n"
+        f"Input: {user_input}"
+    )
+    
+    raw = self.capability_worker.text_to_text_response(prompt)
+    clean = raw.replace("```json", "").replace("```", "").strip()
+    
+    try:
+        return json.loads(clean)
+    except:
+        return {"intent": "CHAT", "confidence": 0.0}
+
+async def run(self):
+    await self.capability_worker.speak("What would you like to do?")
+    user_input = await self.capability_worker.user_response()
+    
+    intent = self.classify_intent(user_input)
+    
+    if intent["intent"] == "CREATE":
+        await self.capability_worker.speak("Creating...")
+    elif intent["intent"] == "MODIFY":
+        await self.capability_worker.speak("Modifying...")
+    else:
+        await self.capability_worker.speak("Got it.")
+    
+    self.capability_worker.resume_normal_flow()
+```
+</CodeGroup>
+
+**Use cases:** Complex abilities with multiple modes, task routers, command dispatchers
+
+---
+
+## Pattern 6: Music / Audio Playback
+
+Download and play audio with music mode signaling.
+
+<CodeGroup>
+```python Audio playback
+import requests
+
+async def run(self):
+    # Enable music mode
+    self.worker.music_mode_event.set()
+    await self.capability_worker.send_data_over_websocket(
+        "music-mode",
+        {"mode": "on"}
+    )
+    
+    # Download and play audio
+    resp = requests.get("https://example.com/song.mp3")
+    await self.capability_worker.play_audio(resp.content)
+    
+    # Disable music mode
+    await self.capability_worker.send_data_over_websocket(
+        "music-mode",
+        {"mode": "off"}
+    )
+    self.worker.music_mode_event.clear()
+    
+    self.capability_worker.resume_normal_flow()
+```
+</CodeGroup>
+
+<Note>
+Music mode prevents the system from transcribing audio playback as user input.
+</Note>
+
+**Use cases:** Music players, podcast players, audiobook readers, ambient soundscapes
+
+---
+
+## Pattern 7: Custom Voice
+
+Use a specific ElevenLabs voice instead of the Agent's default.
+
+<CodeGroup>
+```python Custom voice
+VOICE_ID = "pNInz6obpgDQGcFmaJgB"  # Deep American male
+
+async def speak_custom(self, text: str):
+    await self.capability_worker.text_to_speech(text, VOICE_ID)
+
+async def run(self):
+    await self.speak_custom("Hello from a custom voice!")
+    self.capability_worker.resume_normal_flow()
+```
+</CodeGroup>
+
+**Use cases:** Character-based interactions, multilingual abilities, storytelling
+
+---
+
+## Pattern 8: Conversation History
+
+Pass conversation history to the LLM for context-aware responses.
+
+<CodeGroup>
+```python Stateful conversation
+async def run(self):
+    history = []
+    await self.capability_worker.speak("Let's chat. Say stop to end.")
+    
+    while True:
+        user_input = await self.capability_worker.user_response()
+        
+        if "stop" in user_input.lower():
+            break
+        
+        history.append({"role": "user", "content": user_input})
+        
+        response = self.capability_worker.text_to_text_response(
+            user_input,
+            history=history,
+            system_prompt="You are a helpful assistant."
+        )
+        
+        history.append({"role": "assistant", "content": response})
+        await self.capability_worker.speak(response)
+    
+    self.capability_worker.resume_normal_flow()
+```
+</CodeGroup>
+
+**Use cases:** Therapy bots, tutoring, long-form interviews, data collection
+
+---
+
+## Pattern 9: File-Based IPC (Skill + Daemon)
+
+Coordinate between `main.py` and `watcher.py` using shared JSON files.
+
+<CodeGroup>
+```python Skill writes state
+async def write_state(self, data: dict):
+    # CRITICAL: Delete before writing to avoid append corruption
+    filename = "state.json"
+    
+    if await self.capability_worker.check_if_file_exists(filename, False):
+        await self.capability_worker.delete_file(filename, False)
+    
+    await self.capability_worker.write_file(
+        filename,
+        json.dumps(data),
+        False
+    )
+```
+
+```python Daemon reads state
+async def read_state(self) -> dict:
+    filename = "state.json"
+    
+    if not await self.capability_worker.check_if_file_exists(filename, False):
+        return {}
+    
+    raw = await self.capability_worker.read_file(filename, False)
+    
+    try:
+        return json.loads(raw)
+    except:
+        return {}
+```
+</CodeGroup>
+
+<Warning>
+**Critical:** `write_file()` appends by default. Always delete the file first when writing JSON to avoid `[old][new]` corruption.
+</Warning>
+
+**Use cases:** Alarms, reminders, scheduled tasks, state machines
+
+---
+
+## Pattern 10: Local Command Execution
+
+Execute commands on the user's connected device.
+
+<CodeGroup>
+```python Local execution
+async def run(self):
+    user_input = await self.capability_worker.wait_for_complete_transcription()
+    
+    # Translate natural language to command
+    command = self.capability_worker.text_to_text_response(
+        f"Convert to a safe shell command: {user_input}"
+    )
+    
+    await self.capability_worker.speak("Running that now.")
+    
+    result = await self.capability_worker.exec_local_command(command)
+    
+    if result.get("success"):
+        await self.capability_worker.speak(result["data"])
+    else:
+        await self.capability_worker.speak("Command failed.")
+    
+    self.capability_worker.resume_normal_flow()
+```
+</CodeGroup>
+
+<Warning>
+Always validate and sanitize commands before execution. Never run destructive commands without explicit user confirmation.
+</Warning>
+
+**Use cases:** Dev automation, system monitoring, file management, git operations
+
+---
+
+## Anti-Patterns (Don't Do This)
+
+<Accordion title="❌ Using print() instead of logger">
+```python
+# ❌ Don't use print
+print("hello")
+
+# ✅ Use the logger
+self.worker.editor_logging_handler.info("hello")
+```
+
+Logs from `print()` are lost. Always use the logger.
+</Accordion>
+
+<Accordion title="❌ Using asyncio.sleep() in daemons">
+```python
+# ❌ Don't use asyncio.sleep
+await asyncio.sleep(5)
+
+# ✅ Use session tasks
+await self.worker.session_tasks.sleep(5)
+```
+
+`asyncio.sleep()` doesn't respect session cleanup. Use `session_tasks.sleep()` to ensure proper shutdown.
+</Accordion>
+
+<Accordion title="❌ Forgetting resume_normal_flow()">
+```python
+# ❌ Don't forget resume_normal_flow
+async def run(self):
+    await self.capability_worker.speak("Done!")
+    # Personality is now stuck!
+
+# ✅ Always call it
+async def run(self):
+    await self.capability_worker.speak("Done!")
+    self.capability_worker.resume_normal_flow()
+```
+
+Without `resume_normal_flow()`, the agent will never respond to user input again.
+</Accordion>
+
+<Accordion title="❌ Calling resume_normal_flow() in daemons">
+```python
+# ❌ Don't call resume_normal_flow in daemons
+async def first_function(self):
+    while True:
+        # daemon logic
+        pass
+    self.capability_worker.resume_normal_flow()  # WRONG
+
+# ✅ Daemons never call resume_normal_flow
+async def first_function(self):
+    while True:
+        # daemon logic
+        await self.worker.session_tasks.sleep(5.0)
+```
+
+Daemons run independently and don't control conversation flow.
+</Accordion>
+
+<Accordion title="❌ Appending to JSON files">
+```python
+# ❌ Don't append JSON
+await self.capability_worker.write_file("data.json", json.dumps(data))
+await self.capability_worker.write_file("data.json", json.dumps(more_data))
+# Result: [old][new] <- corrupted JSON
+
+# ✅ Delete before writing
+await self.capability_worker.delete_file("data.json")
+await self.capability_worker.write_file("data.json", json.dumps(data))
+```
+
+`write_file()` appends by default. Always delete first when writing structured data.
+</Accordion>
+
+---
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Templates" icon="layer-group" href="/building/templates">
+    Explore all available templates
+  </Card>
+  <Card title="Testing" icon="flask" href="/building/testing">
+    Learn how to test your abilities
+  </Card>
+  <Card title="Best Practices" icon="star" href="/building/best-practices">
+    Voice UX and security best practices
+  </Card>
+  <Card title="SDK Reference" icon="book" href="/api/capability-worker">
+    Complete CapabilityWorker API
+  </Card>
+</CardGroup>

@@ -1,0 +1,273 @@
+---
+title: Submission Guide
+description: Step-by-step guide to submitting your ability from fork to merged PR
+---
+
+This guide walks you through the complete process of contributing an ability, from forking the repository to getting your PR merged.
+
+## Step 1: Fork and Clone
+
+Start by forking the repository on GitHub, then clone your fork:
+
+```bash
+git clone https://github.com/YOUR_USERNAME/abilities.git
+cd abilities
+```
+
+### Set Up Upstream Remote
+
+Set up the upstream remote to stay in sync with the original repo:
+
+```bash
+git remote add upstream https://github.com/OpenHome-dev/abilities.git
+```
+
+Then make sure you have the `dev` branch locally and start from it:
+
+```bash
+git fetch upstream
+git checkout dev
+git pull upstream dev
+```
+
+<Note>
+  Why upstream? This ensures you're always branching from the latest `dev` on the original repo, not a potentially stale `dev` on your fork.
+</Note>
+
+## Step 2: Create Your Ability Branch
+
+Branch off `dev` (not `main`):
+
+```bash
+git checkout -b add-your-ability-name dev
+```
+
+Use a descriptive branch name like:
+- `add-dad-jokes`
+- `add-pomodoro-timer`
+- `fix-weather-error-handling`
+
+<Warning>
+  Always branch from `dev`, never from `main`. This is critical for our branching strategy.
+</Warning>
+
+## Step 3: Pick a Template
+
+Choose the template closest to what you're building:
+
+| Template | Use When |
+|----------|----------|
+| `templates/basic-template/` | Simple ask → respond → done |
+| `templates/api-template/` | You're calling an external API |
+| `templates/loop-template/` | Interactive / multi-turn conversation |
+
+Copy it to the community folder:
+
+```bash
+cp -r templates/basic-template community/your-ability-name
+```
+
+## Step 4: Build Your Ability
+
+Edit `main.py` in your new folder. Every ability must:
+
+<Steps>
+  <Step title="Extend MatchingCapability">
+    Your main class should inherit from `MatchingCapability`
+  </Step>
+  <Step title="Implement register_capability()">
+    Copy the boilerplate exactly from the template - this reads the platform-managed `config.json`
+  </Step>
+  <Step title="Implement call()">
+    Set up `worker` + `capability_worker` and launch your async logic
+  </Step>
+  <Step title="Call resume_normal_flow()">
+    Must be called on every exit path (success, error, user cancellation)
+  </Step>
+  <Step title="Add error handling">
+    Wrap API calls and external operations in try/except blocks
+  </Step>
+  <Step title="Use proper logging">
+    Use `self.worker.editor_logging_handler` instead of `print()`
+  </Step>
+</Steps>
+
+<Note>
+  Trigger words are configured in the OpenHome dashboard, not in code. The `register_capability` boilerplate reads a platform-managed `config.json` at runtime - you never create or edit that file.
+</Note>
+
+### Key Resources
+
+- [CapabilityWorker Reference](https://github.com/openhome-dev/abilities/blob/dev/docs/capability-worker.md) - All available functions (`speak`, `user_response`, `run_io_loop`, file helpers, audio helpers, etc.)
+- [Building Great Abilities](https://github.com/openhome-dev/abilities/blob/dev/docs/Building_Great_OpenHome_Abilities.md) - Best practices and patterns
+
+## Step 5: Write Your README
+
+Create `community/your-ability-name/README.md` with this structure:
+
+```markdown
+# Your Ability Name
+
+![Community](https://img.shields.io/badge/OpenHome-Community-orange?style=flat-square)
+![Author](https://img.shields.io/badge/Author-@yourusername-lightgrey?style=flat-square)
+
+## What It Does
+One or two sentences explaining what this ability does.
+
+## Suggested Trigger Words
+- "trigger phrase one"
+- "another trigger"
+
+## Setup
+- Any API keys needed and where to get them
+- Any other setup steps
+
+## How It Works
+Brief description of the conversation flow.
+
+## Example Conversation
+> **User:** "trigger phrase one"
+> **AI:** "Response example..."
+> **User:** "follow up"
+> **AI:** "Another response..."
+```
+
+## Step 6: Test It
+
+Before submitting, thoroughly test your ability:
+
+<Steps>
+  <Step title="Zip your ability folder">
+    Create a zip file of your entire ability directory
+  </Step>
+  <Step title="Upload to Live Editor">
+    Go to [app.openhome.com](https://app.openhome.com) → Abilities → Add Custom Ability
+  </Step>
+  <Step title="Configure trigger words">
+    Set your trigger words in the dashboard
+  </Step>
+  <Step title="Test all paths">
+    Verify success paths, error handling, and exit commands ("stop", "exit", "cancel")
+  </Step>
+</Steps>
+
+<Warning>
+  Make sure `resume_normal_flow()` is called on all exit paths. Missing this is one of the most common review issues.
+</Warning>
+
+## Step 7: Sync with Dev Before Submitting
+
+Before you push, make sure your branch is current with the latest `dev` from upstream:
+
+```bash
+git fetch upstream
+git rebase upstream/dev
+```
+
+If you prefer merge over rebase:
+
+```bash
+git fetch upstream
+git merge upstream/dev
+```
+
+Resolve any conflicts, then continue.
+
+## Step 8: Submit Your PR
+
+Commit and push your changes:
+
+```bash
+git add community/your-ability-name/
+git commit -m "Add your-ability-name community ability"
+git push origin add-your-ability-name
+```
+
+Open a Pull Request on GitHub:
+
+- **Base branch: `dev`** (not `main`)
+- **Compare branch: `add-your-ability-name`**
+- Fill out the PR template completely
+
+<Warning>
+  PRs targeting `main` will be closed and you'll be asked to re-open against `dev`.
+</Warning>
+
+## What Happens After You Submit
+
+<Steps>
+  <Step title="Automated checks run">
+    `validate-ability`, `path-check`, `security-scan`, and linting must all pass
+  </Step>
+  <Step title="Maintainer review">
+    A maintainer reviews your submission, typically within 3-5 business days
+  </Step>
+  <Step title="Feedback round">
+    You may be asked to make changes. Push additional commits to the same branch - the PR updates automatically
+  </Step>
+  <Step title="Merge to dev">
+    Once approved, a maintainer squash-merges your PR into `dev`
+  </Step>
+  <Step title="Promotion to main">
+    Periodically, the maintainer team validates `dev` and merges it into `main`
+  </Step>
+  <Step title="Marketplace availability">
+    Your ability becomes available to all users on the Marketplace
+  </Step>
+</Steps>
+
+<Note>
+  You don't need to do anything after step 4. The `dev → main` promotion is handled by maintainers.
+</Note>
+
+## PR Requirements Summary
+
+Your PR must include:
+
+- [ ] All files in `community/your-ability-name/` (not in `official/`)
+- [ ] `main.py` following the SDK pattern
+- [ ] `README.md` with complete documentation
+- [ ] PR targeting `dev` branch
+- [ ] All automated checks passing
+
+## Common Issues and Fixes
+
+<AccordionGroup>
+  <Accordion title="PR checks failing">
+    Check the automated check output for specific errors. Common issues:
+    - Blocked imports detected
+    - Missing `resume_normal_flow()` calls
+    - Using `print()` instead of `editor_logging_handler`
+    - Files in wrong directory
+  </Accordion>
+  
+  <Accordion title="Merge conflicts with dev">
+    Sync your branch with upstream dev:
+    ```bash
+    git fetch upstream
+    git rebase upstream/dev
+    # Resolve conflicts
+    git push origin add-your-ability-name --force
+    ```
+  </Accordion>
+  
+  <Accordion title="Accidentally targeted main">
+    Close the PR and create a new one targeting `dev`. Or change the base branch in the PR settings (top of the PR page).
+  </Accordion>
+  
+  <Accordion title="Test uploads not working">
+    - Ensure your zip includes the root folder
+    - Check that `main.py` has no syntax errors
+    - Verify trigger words are configured in dashboard
+    - Check logs in the Live Editor for errors
+  </Accordion>
+</AccordionGroup>
+
+## Need Help?
+
+If you get stuck at any point:
+
+- Ask in [Discord](https://discord.gg/openhome) for quick help
+- Check the [SDK Reference](https://github.com/openhome-dev/abilities/blob/dev/docs/OpenHome_SDK_Reference.md)
+- Look at existing abilities in `community/` for examples
+- Open an issue if you think you've found a bug

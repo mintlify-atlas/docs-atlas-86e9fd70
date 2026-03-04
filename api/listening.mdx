@@ -1,0 +1,502 @@
+---
+title: 'Listening & User Input'
+description: 'Capture user input via speech or text'
+icon: 'microphone'
+---
+
+## Overview
+
+OpenHome provides four methods for capturing user input:
+
+- **`user_response()`** - Wait for next input
+- **`wait_for_complete_transcription()`** - Wait for complete utterance
+- **`run_io_loop()`** - Speak + listen combined
+- **`run_confirmation_loop()`** - Yes/no confirmation
+
+All methods return the transcribed user input as a string.
+
+---
+
+## user_response()
+
+Waits for the user's next spoken or typed input and returns it as a string.
+
+### Signature
+
+```python
+await self.capability_worker.user_response() -> str
+```
+
+### Returns
+
+<ResponseField name="response" type="string">
+  The transcribed user input. May be empty if transcription fails.
+</ResponseField>
+
+### Examples
+
+<CodeGroup>
+
+```python Basic Usage
+user_input = await self.capability_worker.user_response()
+if user_input:
+    self.worker.editor_logging_handler.info(f"User said: {user_input}")
+```
+
+```python Input Validation
+while True:
+    city = await self.capability_worker.user_response()
+    if city and len(city) > 2:
+        break
+    await self.capability_worker.speak("Sorry, I didn't catch that. What city?")
+```
+
+```python Loop Pattern
+await self.capability_worker.speak("Ask me anything, or say stop.")
+
+while True:
+    user_input = await self.capability_worker.user_response()
+    
+    if not user_input:
+        continue
+    
+    if "stop" in user_input.lower():
+        await self.capability_worker.speak("Goodbye!")
+        break
+    
+    response = self.capability_worker.text_to_text_response(user_input)
+    await self.capability_worker.speak(response)
+
+self.capability_worker.resume_normal_flow()
+```
+
+```python Exit Detection
+EXIT_WORDS = {"stop", "exit", "quit", "cancel", "done"}
+
+user_input = await self.capability_worker.user_response()
+
+if any(word in user_input.lower() for word in EXIT_WORDS):
+    await self.capability_worker.speak("Stopping now.")
+    self.capability_worker.resume_normal_flow()
+```
+
+</CodeGroup>
+
+### Best Practices
+
+<Warning>
+Always check for empty strings. Transcription can fail or return empty results.
+</Warning>
+
+```python
+# ✅ Good
+user_input = await self.capability_worker.user_response()
+if not user_input:
+    continue  # Skip empty input
+
+# ❌ Bad
+user_input = await self.capability_worker.user_response()
+process(user_input)  # May crash on empty string
+```
+
+---
+
+## wait_for_complete_transcription()
+
+Waits until the user has **completely finished speaking** before returning. Use when you need the full utterance without premature cutoff.
+
+### Signature
+
+```python
+await self.capability_worker.wait_for_complete_transcription() -> str
+```
+
+### Returns
+
+<ResponseField name="response" type="string">
+  The complete transcribed input after the user finishes speaking
+</ResponseField>
+
+### When to Use
+
+| Use Case | Example |
+|----------|--------|
+| Long-form input | Dictation, descriptions, stories |
+| Addresses | Street addresses with multiple parts |
+| Lists | "Add apples, oranges, and bananas" |
+| Numbers | Phone numbers, credit cards |
+
+### Examples
+
+<CodeGroup>
+
+```python Dictation
+await self.capability_worker.speak(
+    "Tell me your full address. I'll wait until you finish."
+)
+address = await self.capability_worker.wait_for_complete_transcription()
+
+self.worker.editor_logging_handler.info(f"Address: {address}")
+```
+
+```python Voice Note Recording
+await self.capability_worker.speak(
+    "Start your voice note. I'll let you finish before processing."
+)
+
+note = await self.capability_worker.wait_for_complete_transcription()
+
+# Save to file
+await self.capability_worker.write_file(
+    "voice_notes.txt",
+    f"\n{note}",
+    False
+)
+
+await self.capability_worker.speak("Got it. Note saved.")
+```
+
+```python Story Collection
+await self.capability_worker.speak(
+    "Tell me a story. Take your time."
+)
+
+story = await self.capability_worker.wait_for_complete_transcription()
+
+# Summarize with LLM
+summary = self.capability_worker.text_to_text_response(
+    f"Summarize this story in one sentence: {story}"
+)
+
+await self.capability_worker.speak(f"Here's your summary: {summary}")
+```
+
+</CodeGroup>
+
+### Comparison with user_response()
+
+| Method | Timing | Use Case |
+|--------|--------|----------|
+| `user_response()` | Returns on short pause | Quick back-and-forth, single words/phrases |
+| `wait_for_complete_transcription()` | Returns after full utterance | Long input, addresses, dictation |
+
+---
+
+## run_io_loop()
+
+Speaks the text, then waits for a response. A convenience wrapper around `speak()` + `user_response()`.
+
+### Signature
+
+```python
+await self.capability_worker.run_io_loop(text: str) -> str
+```
+
+<ParamField path="text" type="string" required>
+  The text to speak before listening
+</ParamField>
+
+### Returns
+
+<ResponseField name="response" type="string">
+  The user's reply after the prompt
+</ResponseField>
+
+### Examples
+
+<CodeGroup>
+
+```python Simple Question
+name = await self.capability_worker.run_io_loop("What's your name?")
+await self.capability_worker.speak(f"Nice to meet you, {name}!")
+```
+
+```python Data Collection
+questions = [
+    "What's your favorite color?",
+    "What's your favorite food?",
+    "What's your favorite movie?",
+]
+
+answers = []
+for question in questions:
+    answer = await self.capability_worker.run_io_loop(question)
+    answers.append(answer)
+
+await self.capability_worker.speak("Thanks! I've saved your preferences.")
+```
+
+```python Sequential Flow
+user_name = await self.capability_worker.run_io_loop(
+    "Hi! What's your name?"
+)
+
+city = await self.capability_worker.run_io_loop(
+    f"Nice to meet you, {user_name}. What city are you in?"
+)
+
+confirm = await self.capability_worker.run_io_loop(
+    f"Got it. You're {user_name} from {city}. Is that right?"
+)
+
+if "yes" in confirm.lower():
+    await self.capability_worker.speak("Perfect! Let's continue.")
+```
+
+```python Error Recovery
+while True:
+    email = await self.capability_worker.run_io_loop(
+        "What's your email address?"
+    )
+    
+    if "@" in email:
+        break
+    
+    await self.capability_worker.speak(
+        "That doesn't look like an email. Let's try again."
+    )
+```
+
+</CodeGroup>
+
+### When to Use
+
+- ✅ Quick question-answer pairs
+- ✅ Data collection forms
+- ✅ Simple prompts needing immediate response
+- ✅ When you always speak before listening
+
+<Tip>
+Use `run_io_loop()` instead of manually calling `speak()` then `user_response()` - it's cleaner and less error-prone.
+</Tip>
+
+---
+
+## run_confirmation_loop()
+
+Asks a yes/no question and loops until the user clearly says yes or no. Returns a boolean.
+
+### Signature
+
+```python
+await self.capability_worker.run_confirmation_loop(text: str) -> bool
+```
+
+<ParamField path="text" type="string" required>
+  The yes/no question to ask. The system automatically appends "Please respond with 'yes' or 'no'."
+</ParamField>
+
+### Returns
+
+<ResponseField name="confirmed" type="boolean">
+  `True` if user confirms, `False` if user declines
+</ResponseField>
+
+### Examples
+
+<CodeGroup>
+
+```python Basic Confirmation
+confirmed = await self.capability_worker.run_confirmation_loop(
+    "Should I send this email?"
+)
+
+if confirmed:
+    send_email()
+    await self.capability_worker.speak("Email sent!")
+else:
+    await self.capability_worker.speak("Okay, I won't send it.")
+```
+
+```python Multiple Confirmations
+items = ["Apples", "Oranges", "Bananas"]
+selected = []
+
+for item in items:
+    wants_item = await self.capability_worker.run_confirmation_loop(
+        f"Do you want {item}?"
+    )
+    if wants_item:
+        selected.append(item)
+
+await self.capability_worker.speak(
+    f"Adding {', '.join(selected)} to your cart."
+)
+```
+
+```python Destructive Action Guard
+await self.capability_worker.speak(
+    "This will delete all your saved data."
+)
+
+confirmed = await self.capability_worker.run_confirmation_loop(
+    "Are you absolutely sure?"
+)
+
+if confirmed:
+    delete_all_data()
+    await self.capability_worker.speak("Data deleted.")
+else:
+    await self.capability_worker.speak("Cancelled. Your data is safe.")
+```
+
+```python Onboarding
+wants_tutorial = await self.capability_worker.run_confirmation_loop(
+    "Is this your first time using this?"
+)
+
+if wants_tutorial:
+    await run_tutorial()
+else:
+    await self.capability_worker.speak("Great! Let's get started.")
+```
+
+</CodeGroup>
+
+### Behavior
+
+- Automatically loops until it gets a clear yes/no
+- Accepts variations: "yeah", "yep", "nope", "nah", etc.
+- Handles ambiguous responses by re-asking
+
+<Note>
+The method automatically appends "Please respond with 'yes' or 'no'" to your prompt, so you don't need to include that in your text.
+</Note>
+
+---
+
+## Common Patterns
+
+### Loop with Exit Detection
+
+```python
+EXIT_WORDS = {"stop", "exit", "quit", "done", "cancel"}
+
+await self.capability_worker.speak("Ask me anything. Say stop when done.")
+
+while True:
+    user_input = await self.capability_worker.user_response()
+    
+    if not user_input:
+        continue
+    
+    if any(word in user_input.lower() for word in EXIT_WORDS):
+        await self.capability_worker.speak("Goodbye!")
+        break
+    
+    # Process input
+    response = self.capability_worker.text_to_text_response(user_input)
+    await self.capability_worker.speak(response)
+
+self.capability_worker.resume_normal_flow()
+```
+
+### Multi-Step Form
+
+```python
+async def collect_user_info(self):
+    """Collect user information step by step."""
+    
+    name = await self.capability_worker.run_io_loop(
+        "What's your full name?"
+    )
+    
+    email = await self.capability_worker.run_io_loop(
+        "What's your email?"
+    )
+    
+    phone = await self.capability_worker.run_io_loop(
+        "What's your phone number?"
+    )
+    
+    # Confirm all data
+    summary = f"Name: {name}, Email: {email}, Phone: {phone}"
+    confirmed = await self.capability_worker.run_confirmation_loop(
+        f"I have {summary}. Is this correct?"
+    )
+    
+    if confirmed:
+        return {"name": name, "email": email, "phone": phone}
+    else:
+        await self.capability_worker.speak("Let's start over.")
+        return await self.collect_user_info()  # Recursive retry
+```
+
+### Retry on Empty
+
+```python
+async def get_valid_input(self, prompt: str, max_retries: int = 3) -> str:
+    """Get user input with retries on empty response."""
+    
+    for attempt in range(max_retries):
+        user_input = await self.capability_worker.run_io_loop(prompt)
+        
+        if user_input and len(user_input) > 0:
+            return user_input
+        
+        if attempt < max_retries - 1:
+            await self.capability_worker.speak(
+                "Sorry, I didn't catch that. Let's try again."
+            )
+    
+    await self.capability_worker.speak(
+        "I'm having trouble hearing you. Let's try again later."
+    )
+    return None
+```
+
+---
+
+## Best Practices
+
+### Always Check for Empty Input
+
+```python
+# ✅ Good
+user_input = await self.capability_worker.user_response()
+if not user_input:
+    continue
+
+# ❌ Bad
+user_input = await self.capability_worker.user_response()
+result = process(user_input)  # May crash
+```
+
+### Use run_io_loop() for Simple Prompts
+
+```python
+# ✅ Good
+name = await self.capability_worker.run_io_loop("What's your name?")
+
+# ❌ Verbose
+await self.capability_worker.speak("What's your name?")
+name = await self.capability_worker.user_response()
+```
+
+### Provide Exit Keywords
+
+```python
+# ✅ Good
+await self.capability_worker.speak(
+    "Let's chat. Say 'stop' when you're done."
+)
+
+# ❌ Bad - user doesn't know how to exit
+await self.capability_worker.speak("Let's chat.")
+```
+
+---
+
+## Related Methods
+
+<CardGroup cols={2}>
+  <Card title="Speaking" icon="volume" href="/api/speaking">
+    Combine with speak() for two-way conversation
+  </Card>
+  <Card title="LLM" icon="brain" href="/api/llm">
+    Process user input with text_to_text_response()
+  </Card>
+  <Card title="Flow Control" icon="traffic-light" href="/api/flow-control">
+    Use resume_normal_flow() after input loops
+  </Card>
+</CardGroup>

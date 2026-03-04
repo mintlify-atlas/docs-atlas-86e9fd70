@@ -1,0 +1,500 @@
+---
+title: 'Audio Playback & Streaming'
+description: 'Play audio files and stream audio content'
+icon: 'music'
+---
+
+## Overview
+
+OpenHome provides multiple methods for audio playback:
+
+- **`play_audio()`** - Play audio from bytes or file objects
+- **`play_from_audio_file()`** - Play local audio files
+- **Audio Streaming** - Stream large audio files in chunks
+- **Music Mode** - Signal long-form audio playback
+
+---
+
+## play_audio()
+
+Plays audio directly from bytes or a file-like object. Use for audio downloaded from URLs or generated programmatically.
+
+### Signature
+
+```python
+await self.capability_worker.play_audio(file_content: bytes) -> None
+```
+
+<ParamField path="file_content" type="bytes" required>
+  Audio data as bytes or file-like object. Supports MP3, WAV, OGG, and other common formats.
+</ParamField>
+
+### Returns
+
+`None` - Audio is played to the user
+
+### Examples
+
+<CodeGroup>
+
+```python From URL
+import requests
+
+response = requests.get("https://example.com/sound.mp3")
+
+if response.status_code == 200:
+    await self.capability_worker.play_audio(response.content)
+else:
+    await self.capability_worker.speak("Sorry, I couldn't load the audio.")
+```
+
+```python Generated Audio
+import io
+from pydub import AudioSegment
+from pydub.generators import Sine
+
+# Generate a 1-second 440Hz tone
+tone = Sine(440).to_audio_segment(duration=1000)
+
+# Export to bytes
+buffer = io.BytesIO()
+tone.export(buffer, format="mp3")
+
+await self.capability_worker.play_audio(buffer.getvalue())
+```
+
+```python From API Response
+import requests
+
+# Text-to-speech API (example)
+response = requests.post(
+    "https://api.example.com/tts",
+    json={"text": "Hello world", "voice": "en-US"}
+)
+
+audio_data = response.content
+await self.capability_worker.play_audio(audio_data)
+```
+
+```python With Error Handling
+try:
+    audio = requests.get(audio_url, timeout=10)
+    audio.raise_for_status()
+    
+    await self.capability_worker.play_audio(audio.content)
+    
+except requests.RequestException as e:
+    self.worker.editor_logging_handler.error(f"Audio download failed: {e}")
+    await self.capability_worker.speak("Sorry, I couldn't play that audio.")
+```
+
+</CodeGroup>
+
+---
+
+## play_from_audio_file()
+
+Plays an audio file stored in the Ability's directory (same folder as `main.py`).
+
+### Signature
+
+```python
+await self.capability_worker.play_from_audio_file(file_name: str) -> None
+```
+
+<ParamField path="file_name" type="string" required>
+  Filename of the audio file in your Ability folder. Must be a relative path.
+</ParamField>
+
+### Returns
+
+`None` - Audio is played to the user
+
+### Examples
+
+<CodeGroup>
+
+```python Basic Usage
+# Ability folder structure:
+# my-ability/
+#   main.py
+#   notification.mp3
+
+await self.capability_worker.play_from_audio_file("notification.mp3")
+```
+
+```python Sound Effects
+await self.capability_worker.speak("Starting timer.")
+await self.capability_worker.play_from_audio_file("beep.wav")
+
+await self.worker.session_tasks.sleep(60)  # 1 minute
+
+await self.capability_worker.play_from_audio_file("alarm.mp3")
+await self.capability_worker.speak("Time's up!")
+```
+
+```python Subfolder
+# Ability folder structure:
+# my-ability/
+#   main.py
+#   audio/
+#     intro.mp3
+#     outro.mp3
+
+await self.capability_worker.play_from_audio_file("audio/intro.mp3")
+```
+
+```python Conditional Playback
+if success:
+    await self.capability_worker.play_from_audio_file("success.mp3")
+else:
+    await self.capability_worker.play_from_audio_file("error.wav")
+```
+
+</CodeGroup>
+
+### Supported Formats
+
+- MP3
+- WAV
+- OGG
+- FLAC
+- M4A
+
+<Tip>
+Use WAV for short sound effects (uncompressed, instant playback). Use MP3 for longer audio (compressed, smaller file size).
+</Tip>
+
+---
+
+## Audio Streaming
+
+For large audio files or real-time streaming, use the streaming API to send audio in chunks instead of loading the entire file into memory.
+
+### Methods
+
+<CardGroup cols={3}>
+  <Card title="stream_init()" icon="play">
+    Initialize streaming session
+  </Card>
+  <Card title="send_audio_data_in_stream()" icon="tower-broadcast">
+    Send audio chunks
+  </Card>
+  <Card title="stream_end()" icon="stop">
+    End streaming session
+  </Card>
+</CardGroup>
+
+### stream_init()
+
+Initializes an audio streaming session.
+
+```python
+await self.capability_worker.stream_init()
+```
+
+### send_audio_data_in_stream()
+
+Streams audio data in chunks. Handles mono conversion and resampling automatically.
+
+```python
+await self.capability_worker.send_audio_data_in_stream(
+    file_content: bytes,
+    chunk_size: int = 4096
+)
+```
+
+<ParamField path="file_content" type="bytes" required>
+  Audio data as bytes, file-like object, or `httpx.Response`
+</ParamField>
+
+<ParamField path="chunk_size" type="int" default="4096">
+  Bytes per chunk. Default is 4096 (4KB).
+</ParamField>
+
+### stream_end()
+
+Ends the streaming session and cleans up.
+
+```python
+await self.capability_worker.stream_end()
+```
+
+### Streaming Examples
+
+<CodeGroup>
+
+```python Basic Streaming
+await self.capability_worker.stream_init()
+
+response = requests.get("https://example.com/long-audio.mp3")
+
+await self.capability_worker.send_audio_data_in_stream(
+    response.content,
+    chunk_size=4096
+)
+
+await self.capability_worker.stream_end()
+```
+
+```python Large File Streaming
+import httpx
+
+await self.capability_worker.stream_init()
+
+async with httpx.AsyncClient() as client:
+    response = await client.get("https://example.com/podcast.mp3")
+    
+    await self.capability_worker.send_audio_data_in_stream(
+        response.content,
+        chunk_size=8192  # 8KB chunks
+    )
+
+await self.capability_worker.stream_end()
+```
+
+```python Error Handling
+try:
+    await self.capability_worker.stream_init()
+    
+    response = requests.get(audio_url, timeout=30)
+    response.raise_for_status()
+    
+    await self.capability_worker.send_audio_data_in_stream(
+        response.content
+    )
+    
+    await self.capability_worker.stream_end()
+    
+except Exception as e:
+    self.worker.editor_logging_handler.error(f"Streaming failed: {e}")
+    await self.capability_worker.stream_end()  # Always cleanup
+    await self.capability_worker.speak("Audio playback failed.")
+```
+
+</CodeGroup>
+
+### When to Use Streaming
+
+| Use Case | Method | Reason |
+|----------|--------|--------|
+| Short clips (under 1 MB) | `play_audio()` | Simple, no overhead |
+| Long files (over 5 MB) | Streaming | Reduces memory usage |
+| Real-time generation | Streaming | Play as it's generated |
+| Network streams | Streaming | Handle slow downloads |
+
+---
+
+## Music Mode
+
+When playing audio longer than a TTS utterance (music, podcasts, long recordings), signal the system to **stop listening** and **not interrupt** the audio.
+
+### Why Music Mode?
+
+Without music mode:
+- System may try to transcribe audio playback as user speech
+- Background noise may trigger interruptions
+- DevKit LEDs don't reflect playback state
+
+With music mode:
+- System stops listening during playback
+- No false transcriptions
+- DevKit LEDs show music mode status
+
+### Pattern
+
+```python
+# 1. Enter music mode
+self.worker.music_mode_event.set()
+await self.capability_worker.send_data_over_websocket(
+    "music-mode",
+    {"mode": "on"}
+)
+
+# 2. Play audio
+await self.capability_worker.play_audio(audio_bytes)
+
+# 3. Exit music mode
+await self.capability_worker.send_data_over_websocket(
+    "music-mode",
+    {"mode": "off"}
+)
+self.worker.music_mode_event.clear()
+```
+
+### Complete Example
+
+```python main.py
+import requests
+from src.agent.capability import MatchingCapability
+from src.main import AgentWorker
+from src.agent.capability_worker import CapabilityWorker
+
+class MusicPlayerAbility(MatchingCapability):
+    worker: AgentWorker = None
+    capability_worker: CapabilityWorker = None
+
+    def call(self, worker: AgentWorker):
+        self.worker = worker
+        self.capability_worker = CapabilityWorker(self.worker)
+        self.worker.session_tasks.create(self.play_music())
+
+    async def enter_music_mode(self):
+        """Signal music playback started."""
+        self.worker.music_mode_event.set()
+        await self.capability_worker.send_data_over_websocket(
+            "music-mode",
+            {"mode": "on"}
+        )
+
+    async def exit_music_mode(self):
+        """Signal music playback ended."""
+        await self.capability_worker.send_data_over_websocket(
+            "music-mode",
+            {"mode": "off"}
+        )
+        self.worker.music_mode_event.clear()
+
+    async def play_music(self):
+        await self.capability_worker.speak("Playing music for you.")
+
+        try:
+            await self.enter_music_mode()
+
+            self.worker.editor_logging_handler.info("Downloading audio...")
+            response = requests.get("https://example.com/song.mp3")
+
+            if response.status_code == 200:
+                await self.capability_worker.play_audio(response.content)
+            else:
+                await self.capability_worker.speak(
+                    "Sorry, I couldn't load the music."
+                )
+
+            await self.exit_music_mode()
+
+        except Exception as e:
+            self.worker.editor_logging_handler.error(f"Playback error: {e}")
+            await self.exit_music_mode()
+            await self.capability_worker.speak(
+                "Something went wrong with playback."
+            )
+
+        self.capability_worker.resume_normal_flow()
+```
+
+<Warning>
+Always call `exit_music_mode()` in your `finally` or `except` blocks to ensure the system returns to normal listening state.
+</Warning>
+
+---
+
+## Audio Recording
+
+Record audio from the user's microphone during a session.
+
+### Methods
+
+| Method | Description |
+|--------|-------------|
+| `start_audio_recording()` | Start recording |
+| `stop_audio_recording()` | Stop recording |
+| `get_audio_recording()` | Get WAV data |
+| `get_audio_recording_length()` | Get duration |
+
+### Example
+
+```python
+async def record_voice_note(self):
+    await self.capability_worker.speak(
+        "Recording a voice note. Start speaking."
+    )
+    
+    self.capability_worker.start_audio_recording()
+    
+    # Record for 10 seconds
+    await self.worker.session_tasks.sleep(10)
+    
+    self.capability_worker.stop_audio_recording()
+    
+    duration = self.capability_worker.get_audio_recording_length()
+    wav_data = self.capability_worker.get_audio_recording()
+    
+    await self.capability_worker.speak(
+        f"Recorded {duration} seconds of audio."
+    )
+    
+    # Save to file storage
+    await self.capability_worker.write_file(
+        "voice_note.wav",
+        wav_data,
+        False
+    )
+    
+    self.capability_worker.resume_normal_flow()
+```
+
+---
+
+## Best Practices
+
+### Use Music Mode for Long Audio
+
+```python
+# ✅ Good - music mode for songs
+async def play_song(self, url: str):
+    await self.enter_music_mode()
+    audio = requests.get(url).content
+    await self.capability_worker.play_audio(audio)
+    await self.exit_music_mode()
+
+# ❌ Bad - no music mode
+async def play_song(self, url: str):
+    audio = requests.get(url).content
+    await self.capability_worker.play_audio(audio)  # May be interrupted
+```
+
+### Always Clean Up Streaming
+
+```python
+# ✅ Good
+try:
+    await self.capability_worker.stream_init()
+    await self.capability_worker.send_audio_data_in_stream(data)
+finally:
+    await self.capability_worker.stream_end()  # Always cleanup
+
+# ❌ Bad
+await self.capability_worker.stream_init()
+await self.capability_worker.send_audio_data_in_stream(data)
+await self.capability_worker.stream_end()  # Skipped on error
+```
+
+### Handle Download Errors
+
+```python
+# ✅ Good
+try:
+    response = requests.get(audio_url, timeout=10)
+    response.raise_for_status()
+    await self.capability_worker.play_audio(response.content)
+except requests.RequestException:
+    await self.capability_worker.speak("Couldn't load the audio.")
+
+# ❌ Bad
+response = requests.get(audio_url)
+await self.capability_worker.play_audio(response.content)  # May crash
+```
+
+---
+
+## Related Methods
+
+<CardGroup cols={2}>
+  <Card title="Speaking" icon="volume" href="/api/speaking">
+    Text-to-speech for voice output
+  </Card>
+  <Card title="Files" icon="folder" href="/api/files">
+    Store recorded audio with file storage
+  </Card>
+</CardGroup>

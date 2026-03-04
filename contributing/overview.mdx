@@ -1,0 +1,128 @@
+---
+title: Contributing Overview
+description: Welcome to the OpenHome Abilities community - learn how to contribute your own abilities
+---
+
+Welcome to the OpenHome Abilities community! We're excited to have you here. Whether you're building a simple utility or a complex interactive experience, this guide will help you get your contribution merged and available on the Marketplace.
+
+## Community vs Official Abilities
+
+OpenHome Abilities are organized into two categories:
+
+<CardGroup cols={2}>
+  <Card title="Community Abilities" icon="users" color="#ff9500">
+    Created and maintained by contributors like you. Submitted to `community/` folder and marked with an orange badge.
+  </Card>
+  <Card title="Official Abilities" icon="badge-check" color="#007aff">
+    Maintained by the OpenHome team. Located in `official/` folder with a blue badge and priority Marketplace placement.
+  </Card>
+</CardGroup>
+
+<Note>
+  You submit all contributions to the `community/` folder. Exceptional community abilities can be [promoted to official status](/contributing/promotion-path) over time based on usage and quality.
+</Note>
+
+## The Quick Version
+
+If you just want to get started right away:
+
+<Steps>
+  <Step title="Fork the repo">
+    Fork the [abilities repository](https://github.com/OpenHome-dev/abilities) on GitHub
+  </Step>
+  <Step title="Copy a template">
+    Copy `templates/basic-template/` to `community/your-ability-name/`
+  </Step>
+  <Step title="Build your ability">
+    Edit `main.py` and create your `README.md`
+  </Step>
+  <Step title="Test it">
+    Upload to the [OpenHome Live Editor](https://app.openhome.com/dashboard/abilities)
+  </Step>
+  <Step title="Submit a PR">
+    Open a Pull Request against the `dev` branch
+  </Step>
+</Steps>
+
+That's it! We'll review and merge it.
+
+## Repository Structure
+
+```
+official/        ← Maintained by OpenHome. Don't submit PRs here.
+community/       ← Your contributions go here.
+templates/       ← Starting points. Copy one to get going.
+docs/            ← Guides and API reference.
+```
+
+<Warning>
+  Only submit to the `community/` folder. The `official/` folder is maintained exclusively by the OpenHome team.
+</Warning>
+
+## Contribution Process Overview
+
+Here's what happens from idea to merged PR:
+
+1. **Fork and branch** - Create your feature branch from `dev` (not `main`)
+2. **Build** - Copy a template and implement your ability
+3. **Test** - Upload to the Live Editor and verify all paths work
+4. **Submit PR** - Open a pull request targeting the `dev` branch
+5. **Automated checks** - Validation, path checks, security scans, and linting run automatically
+6. **Code review** - A maintainer reviews (typically 3-5 business days)
+7. **Merge to dev** - Once approved, your PR is merged to `dev`
+8. **Promotion to main** - Maintainers periodically validate and merge `dev` to `main`
+9. **Marketplace** - Your ability becomes available to all users
+
+<Note>
+  You don't need to do anything after your PR is merged to `dev`. The maintainers handle the `dev → main` promotion.
+</Note>
+
+## Branching Strategy
+
+We use a simplified Git Flow model:
+
+```
+ability/your-ability-name  →  dev  →  main
+```
+
+| Branch | Purpose | Who Merges |
+|--------|---------|------------|
+| `main` | Stable, production-ready. Always deployable. | Maintainers only |
+| `dev` | Integration and testing. All PRs target this branch. | Maintainers after review |
+| `ability/*` or `add-*` | Your working branch for a single ability or change. | You push; maintainers merge to `dev` |
+
+<Warning>
+  **Never open a PR directly to `main`.** All PRs must target `dev`. PRs targeting `main` will be closed with a request to re-open against `dev`.
+</Warning>
+
+## Detailed Guides
+
+Ready to dive deeper? Check out these detailed guides:
+
+<CardGroup cols={2}>
+  <Card title="Submission Guide" icon="code-pull-request" href="/contributing/submission-guide">
+    Step-by-step walkthrough from fork to PR
+  </Card>
+  <Card title="Review Checklist" icon="list-check" href="/contributing/review-checklist">
+    What your PR needs to pass review
+  </Card>
+  <Card title="Promotion Path" icon="arrow-up" href="/contributing/promotion-path">
+    How community abilities become official
+  </Card>
+  <Card title="Building Great Abilities" icon="star" href="https://github.com/openhome-dev/abilities/blob/dev/docs/Building_Great_OpenHome_Abilities.md">
+    Best practices for high-impact abilities
+  </Card>
+</CardGroup>
+
+## Getting Help
+
+Stuck? We're here to help:
+
+- **Code questions** → Ask in [Discord](https://discord.gg/openhome)
+- **Bug reports** → [Open an issue](https://github.com/openhome-dev/abilities/issues/new?template=bug-report.yml)
+- **Ability ideas** → [Suggest or vote on ideas](https://github.com/openhome-dev/abilities/discussions/categories/ability-ideas)
+- **SDK reference** → Check the [OpenHome SDK Reference](https://github.com/openhome-dev/abilities/blob/dev/docs/OpenHome_SDK_Reference.md)
+
+## License
+
+By submitting a PR, you agree that your contribution is licensed under the [MIT License](https://github.com/openhome-dev/abilities/blob/main/LICENSE). Original authorship is always credited in your ability's README and in CONTRIBUTORS.md.

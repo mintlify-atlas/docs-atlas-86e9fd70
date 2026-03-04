@@ -1,0 +1,225 @@
+---
+title: Watcher Template
+description: Background daemon that runs continuously — monitor conversations, poll APIs, and interrupt when conditions are met
+---
+
+<Note>
+  The watcher template demonstrates standalone background daemons that start automatically when a user connects and run for the entire session.
+</Note>
+
+## What is it?
+
+The **Watcher** template shows how to build background daemons that run independently of normal conversation flow. It demonstrates:
+
+- Running in a `while True` loop that starts automatically on session start
+- Using `session_tasks.sleep()` instead of `asyncio.sleep()` for proper cleanup
+- Reading conversation history with `get_full_message_history()`
+- Logging events without interrupting the main conversation
+- No `resume_normal_flow()` — daemons don't own the conversation
+
+This is the most architecturally significant pattern in OpenHome: before daemons, every ability was reactive. Now they can be proactive.
+
+## When to use it
+
+Use the watcher template when you're building:
+
+- **Conversation monitors** — Log interactions, build user profiles, extract insights
+- **Schedulers** — Poll for time-based events, fire reminders
+- **Alert systems** — Watch for keywords, sentiment changes, or context shifts
+- **Background processors** — Analyze ambient audio, accumulate data, build RAG indexes
+
+## Complete code
+
+<CodeGroup>
+
+```python watcher.py
+import json
+from src.agent.capability import MatchingCapability
+from src.main import AgentWorker
+from src.agent.capability_worker import CapabilityWorker
+from time import time
+
+class WatcherCapabilityWatcher(MatchingCapability):
+    worker: AgentWorker = None
+    capability_worker: CapabilityWorker = None
+    background_daemon_mode: bool = False
+    
+    # Do not change following tag of register capability
+    #{{register capability}}
+
+    async def first_function(self):
+        self.worker.editor_logging_handler.info("%s: Watcher Called"%time())
+        while True:
+            self.worker.editor_logging_handler.info("%s: watcher watching"%time())
+            
+            message_history = self.capability_worker.get_full_message_history()[-10:]
+            for message in message_history:
+                self.worker.editor_logging_handler.info("Role: %s, Message: %s"%(message.get("role",""), message.get("content","")))
+            # await self.capability_worker.speak("watching")
+            # await self.capability_worker.play_from_audio_file("alarm.mp3")
+            await self.worker.session_tasks.sleep(20.0)
+
+
+        # Resume the normal workflow
+        self.capability_worker.resume_normal_flow()
+
+    def call(self, worker: AgentWorker, background_daemon_mode: bool):
+        # Initialize the worker and capability worker
+        self.worker = worker
+        self.background_daemon_mode = background_daemon_mode
+        self.capability_worker = CapabilityWorker(self.worker)
+
+        self.worker.session_tasks.create(self.first_function())
+```
+
+</CodeGroup>
+
+## Key patterns
+
+### Background daemon lifecycle
+
+<Steps>
+  <Step title="Daemon starts automatically">
+    Background daemons start when the user connects to an OpenHome agent — no trigger word needed.
+  </Step>
+  
+  <Step title="Runs in infinite loop">
+    Use `while True` to keep the daemon running for the entire session:
+    ```python
+    async def first_function(self):
+        while True:
+            # Do work
+            await self.worker.session_tasks.sleep(20.0)
+    ```
+  </Step>
+  
+  <Step title="Exits when session ends">
+    When the user disconnects, OpenHome automatically cancels all session tasks. No manual cleanup needed.
+  </Step>
+</Steps>
+
+### Critical daemon rules
+
+<Warning>
+  Breaking these rules will cause your daemon to malfunction or crash the session.
+</Warning>
+
+| Rule | Why |
+|------|-----|
+| Use `session_tasks.sleep()`, **not** `asyncio.sleep()` | Ensures proper cleanup when the session ends |
+| **No** `resume_normal_flow()` in the loop | Daemons are independent threads — they don't own the conversation |
+| Call `send_interrupt_signal()` before speaking | Prevents audio overlap; stops system from transcribing daemon output as user input |
+| Use `editor_logging_handler` for debugging | Logs appear in the OpenHome dashboard without interrupting the user |
+
+### Using `session_tasks.sleep()`
+
+<CodeGroup>
+
+```python Correct
+# Use session_tasks.sleep() for daemon sleep intervals
+await self.worker.session_tasks.sleep(20.0)
+```
+
+```python Wrong
+# NEVER use asyncio.sleep() in daemons
+import asyncio
+await asyncio.sleep(20.0)  # ❌ Won't cancel properly on session end
+```
+
+</CodeGroup>
+
+### Reading conversation history
+
+Daemons can access the full message history to analyze conversations:
+
+```python
+# Get the last 10 messages
+message_history = self.capability_worker.get_full_message_history()[-10:]
+
+for message in message_history:
+    role = message.get("role", "")  # "user" or "assistant"
+    content = message.get("content", "")  # The message text
+    self.worker.editor_logging_handler.info(f"{role}: {content}")
+```
+
+This enables:
+- **User profiling** — Extract preferences, interests, recurring topics
+- **Sentiment tracking** — Monitor emotional tone over time
+- **Context building** — Accumulate information for RAG systems
+- **Trigger detection** — Watch for specific keywords or phrases
+
+### Interrupting the conversation
+
+If your daemon needs to speak or play audio, you must first call `send_interrupt_signal()`:
+
+```python
+# CORRECT: Interrupt before speaking
+await self.capability_worker.send_interrupt_signal()
+await self.capability_worker.speak("Your timer is done!")
+```
+
+```python
+# WRONG: Speaking without interrupt
+await self.capability_worker.speak("Your timer is done!")  # ❌ Audio overlap
+```
+
+## Daemon initialization
+
+Note the different signature for daemon `call()`:
+
+```python
+def call(self, worker: AgentWorker, background_daemon_mode: bool):
+    self.worker = worker
+    self.background_daemon_mode = background_daemon_mode
+    self.capability_worker = CapabilityWorker(self.worker)
+    self.worker.session_tasks.create(self.first_function())
+```
+
+Key differences from Skills:
+- Accepts `background_daemon_mode` parameter
+- Passes `self.worker` (not `self`) to `CapabilityWorker`
+- Entry point is named `first_function()` by convention (can be any name)
+
+## SDK methods used
+
+| Method | Purpose |
+|--------|----------|
+| `get_full_message_history()` | Returns list of all messages in the current conversation |
+| `session_tasks.sleep()` | Sleep for N seconds with proper session cleanup |
+| `send_interrupt_signal()` | Pause main conversation before daemon speaks/plays audio |
+| `speak()` | Synthesize text to speech (call after `send_interrupt_signal()`) |
+| `play_from_audio_file()` | Play audio file (call after `send_interrupt_signal()`) |
+
+## Real-world examples
+
+Build on this template to create:
+
+- **Meeting summarizer** — Analyze conversation every 5 minutes, extract action items
+- **User profiler** — Build a profile of user interests, preferences, communication style
+- **Keyword alerter** — Watch for specific words and fire notifications
+- **Sentiment monitor** — Track emotional tone and offer support when needed
+- **RAG builder** — Accumulate context for smarter future responses
+- **Pomodoro timer** — Track work intervals and play break notifications
+- **Baby monitor** — Listen for crying, alert user via interrupt
+- **Smart home scheduler** — Poll device states, trigger automations
+
+## Combining with Skills
+
+For advanced use cases, pair a daemon with a skill using shared file storage. See the [Alarm template](/templates/alarm) for a complete example.
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Alarm Template" icon="bell" href="/templates/alarm">
+    See how Skills and Daemons work together
+  </Card>
+  <Card title="File Storage" icon="folder" href="/api/files">
+    Coordinate between Skills and Daemons with shared files
+  </Card>
+  <Card title="Audio Playback" icon="music" href="/api/audio">
+    Play sounds and music from background daemons
+  </Card>
+  <Card title="Ability Types" icon="bolt" href="/concepts/ability-types">
+    Learn about Skills, Daemons, and Local abilities
+  </Card>
+</CardGroup>

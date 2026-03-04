@@ -1,0 +1,261 @@
+---
+title: API Template
+description: Call external REST APIs from a Skill — fetch data, process it, speak the result
+---
+
+<Note>
+  The API template extends the basic template with outbound HTTP requests. It demonstrates the request/response cycle within the ability lifecycle.
+</Note>
+
+## What is it?
+
+The **api-template** shows how to integrate external APIs into an OpenHome Skill. It demonstrates:
+
+- Making HTTP requests from within an ability
+- Error handling for API failures
+- Using the LLM to transform raw API data into natural speech
+- The full lifecycle: speak → collect input → call API → speak result → exit
+
+This is the foundation for any ability that needs to fetch real-time data from external services.
+
+## When to use it
+
+Use the API template when you're building:
+
+- **Data lookup skills** — Weather, stock prices, sports scores, news headlines
+- **Service integrations** — Perplexity search, Spotify playback, calendar events
+- **Real-time queries** — Flight status, package tracking, restaurant hours
+- **AI-powered features** — Image generation, text analysis, translation
+
+## Complete code
+
+<CodeGroup>
+
+```python main.py
+import json
+import os
+import requests
+from src.agent.capability import MatchingCapability
+from src.main import AgentWorker
+from src.agent.capability_worker import CapabilityWorker
+
+# =============================================================================
+# API TEMPLATE
+# For Abilities that call an external API.
+# Pattern: Speak → Collect input → Call API → Speak result → Exit
+#
+# Replace API_URL, API_HEADERS, and the fetch_data() logic with your own.
+# =============================================================================
+
+# --- CONFIGURATION ---
+# Replace with your actual API endpoint and headers
+API_URL = "https://api.example.com/data"
+API_HEADERS = {
+    "Authorization": "Bearer YOUR_API_KEY_HERE",
+    "Content-Type": "application/json",
+}
+
+class ApiTemplateCapability(MatchingCapability):
+    worker: AgentWorker = None
+    capability_worker: CapabilityWorker = None
+
+    # Do not change following tag of register capability
+    #{{register capability}}
+
+    def call(self, worker: AgentWorker):
+        self.worker = worker
+        self.capability_worker = CapabilityWorker(self)
+        self.worker.session_tasks.create(self.run())
+
+    async def fetch_data(self, query: str) -> str | None:
+        """
+        Call your external API here.
+        Returns the result as a string, or None on failure.
+        """
+        try:
+            response = requests.get(
+                API_URL,
+                headers=API_HEADERS,
+                params={"q": query},
+            )
+            if response.status_code == 200:
+                data = response.json()
+                # --- Parse your API response here ---
+                return str(data)
+            else:
+                self.worker.editor_logging_handler.error(
+                    f"[ApiTemplate] API returned {response.status_code}: {response.text}"
+                )
+                return None
+        except Exception as e:
+            self.worker.editor_logging_handler.error(f"[ApiTemplate] Error: {e}")
+            return None
+
+    async def run(self):
+        # Step 1: Ask what they need
+        await self.capability_worker.speak("Sure! What would you like me to look up?")
+
+        # Step 2: Get user input
+        user_input = await self.capability_worker.user_response()
+
+        # Step 3: Call the API
+        await self.capability_worker.speak("Let me check on that.")
+        result = await self.fetch_data(user_input)
+
+        # Step 4: Respond
+        if result:
+            # Use LLM to turn raw data into a natural spoken response
+            response = self.capability_worker.text_to_text_response(
+                f"Summarize this data in one short sentence for a voice response: {result}"
+            )
+            await self.capability_worker.speak(response)
+        else:
+            await self.capability_worker.speak(
+                "Sorry, I couldn't get that information right now. Try again later."
+            )
+
+        # Step 5: ALWAYS resume normal flow
+        self.capability_worker.resume_normal_flow()
+```
+
+</CodeGroup>
+
+## Key patterns
+
+### Separating API logic from ability flow
+
+The template uses a dedicated `fetch_data()` method to encapsulate the API call:
+
+```python
+async def fetch_data(self, query: str) -> str | None:
+    try:
+        response = requests.get(
+            API_URL,
+            headers=API_HEADERS,
+            params={"q": query},
+        )
+        if response.status_code == 200:
+            data = response.json()
+            return str(data)
+        else:
+            self.worker.editor_logging_handler.error(
+                f"API returned {response.status_code}: {response.text}"
+            )
+            return None
+    except Exception as e:
+        self.worker.editor_logging_handler.error(f"Error: {e}")
+        return None
+```
+
+This separation makes it easy to:
+- Test API calls independently
+- Add retry logic
+- Switch between different APIs
+- Handle rate limiting
+
+### Error handling pattern
+
+<Steps>
+  <Step title="Return None on failure">
+    Instead of raising exceptions, return `None` to let the caller decide what to do:
+    ```python
+    result = await self.fetch_data(user_input)
+    if result:
+        # Success path
+    else:
+        # Failure path
+    ```
+  </Step>
+  
+  <Step title="Log errors for debugging">
+    Use `editor_logging_handler` to log errors that will appear in the OpenHome dashboard:
+    ```python
+    self.worker.editor_logging_handler.error(
+        f"API returned {response.status_code}: {response.text}"
+    )
+    ```
+  </Step>
+  
+  <Step title="Speak user-friendly error messages">
+    Never speak technical error details. Give helpful, actionable feedback:
+    ```python
+    await self.capability_worker.speak(
+        "Sorry, I couldn't get that information right now. Try again later."
+    )
+    ```
+  </Step>
+</Steps>
+
+### Using the LLM to format responses
+
+<Note>
+  Raw API data is rarely in a format suitable for speech. Use `text_to_text_response()` to transform structured data into natural language.
+</Note>
+
+```python
+response = self.capability_worker.text_to_text_response(
+    f"Summarize this data in one short sentence for a voice response: {result}"
+)
+await self.capability_worker.speak(response)
+```
+
+This pattern works for:
+- JSON objects → spoken summaries
+- Lists of items → top recommendations
+- Technical data → user-friendly explanations
+- Long text → concise voice-appropriate versions
+
+## Configuration
+
+Replace the hardcoded values with your actual API details:
+
+```python
+API_URL = "https://api.example.com/data"
+API_HEADERS = {
+    "Authorization": "Bearer YOUR_API_KEY_HERE",
+    "Content-Type": "application/json",
+}
+```
+
+<Warning>
+  Never commit API keys to source control. Use environment variables or OpenHome's secure storage for production abilities.
+</Warning>
+
+## SDK methods used
+
+| Method | Purpose |
+|--------|----------|
+| `speak()` | Synthesize text to speech and play it to the user |
+| `user_response()` | Capture the next user utterance and return transcribed text |
+| `text_to_text_response()` | Send a prompt to the LLM and get back a text response |
+| `resume_normal_flow()` | Exit the ability and return control to the agent |
+
+## Real-world examples
+
+Build on this template to create:
+
+- **Weather skill** — Fetch forecast from OpenWeatherMap API
+- **Search skill** — Query Perplexity or Google Search API
+- **Stock tracker** — Get real-time prices from Alpha Vantage
+- **News reader** — Fetch headlines from NewsAPI
+- **Package tracker** — Check shipping status from carrier APIs
+- **Restaurant finder** — Search Yelp or Google Places
+- **Translation skill** — Call DeepL or Google Translate
+- **Music control** — Integrate with Spotify Web API
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Loop Template" icon="repeat" href="/templates/loop">
+    Add multi-turn conversations with exit commands
+  </Card>
+  <Card title="File Storage" icon="folder" href="/api/files">
+    Persist API responses for later use
+  </Card>
+  <Card title="CapabilityWorker API" icon="code" href="/api/capability-worker">
+    Explore all available SDK methods
+  </Card>
+  <Card title="Examples" icon="lightbulb" href="/examples/weather">
+    See real API integration examples
+  </Card>
+</CardGroup>

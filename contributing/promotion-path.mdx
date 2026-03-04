@@ -1,0 +1,248 @@
+---
+title: Promotion Path
+description: How exceptional community abilities earn official status
+---
+
+Exceptional community abilities can be promoted to Official status. This page explains what that means, what we look for, and what happens when an ability is promoted.
+
+## Community vs Official: What Changes
+
+<CardGroup cols={2}>
+  <Card title="Community Ability" icon="users" color="#ff9500">
+    - Located in `community/` folder
+    - Orange badge on Marketplace
+    - Maintained by original author
+    - Standard Marketplace listing
+    - Best-effort support
+  </Card>
+  <Card title="Official Ability" icon="badge-check" color="#007aff">
+    - Located in `official/` folder
+    - Blue badge on Marketplace
+    - Maintained by OpenHome team
+    - Featured / priority placement
+    - Officially supported
+  </Card>
+</CardGroup>
+
+<Note>
+  Author credit is **always preserved** regardless of status. Your name stays in the README, CONTRIBUTORS.md, and release notes.
+</Note>
+
+## What Makes an Ability Promotion-Worthy
+
+We evaluate community abilities based on these criteria:
+
+| Criteria | Threshold | Why It Matters |
+|----------|-----------|----------------|
+| Marketplace installs | 50+ users | Demonstrates real demand and usefulness |
+| Stability | No critical bugs for 30+ days | Shows the ability is reliable and well-tested |
+| Code quality | Clean, follows all SDK patterns | Makes maintenance easier and sets an example |
+| Author responsiveness | Responds to issues and feedback | Shows commitment to quality |
+| Usefulness | Fills a real gap in the ecosystem | Provides value that doesn't exist elsewhere |
+
+<Warning>
+  Meeting these thresholds doesn't guarantee promotion - they put you in strong consideration. We also look at overall fit with the official catalog.
+</Warning>
+
+## The Promotion Process
+
+Here's how promotion typically happens:
+
+<Steps>
+  <Step title="Monitoring">
+    The OpenHome team continuously monitors high-performing community abilities through Marketplace metrics and user feedback
+  </Step>
+  <Step title="Initial contact">
+    We reach out to the author to discuss potential promotion and gauge interest
+  </Step>
+  <Step title="Deep review">
+    We conduct a thorough code review and may suggest improvements or refactoring
+  </Step>
+  <Step title="Final approval">
+    Once the ability meets all standards, we approve it for promotion
+  </Step>
+  <Step title="Migration">
+    The ability moves from `community/` to `official/` in the repository
+  </Step>
+  <Step title="Recognition">
+    Author is credited in the README, CONTRIBUTORS.md, and release notes
+  </Step>
+  <Step title="Handoff">
+    OpenHome takes over ongoing maintenance while preserving author credit
+  </Step>
+</Steps>
+
+## What Authors Get from Promotion
+
+When your ability is promoted, you receive:
+
+<CardGroup cols={2}>
+  <Card title="Permanent Credit" icon="signature">
+    Your name as the original creator in README, CONTRIBUTORS.md, and all documentation
+  </Card>
+  <Card title="Release Notes" icon="megaphone">
+    Recognition in official release notes and announcements
+  </Card>
+  <Card title="Wider Reach" icon="users">
+    Featured Marketplace placement means more users discover your ability
+  </Card>
+  <Card title="Maintenance Support" icon="wrench">
+    OpenHome handles ongoing updates, bug fixes, and SDK migrations
+  </Card>
+</CardGroup>
+
+<Note>
+  You retain credit but transfer maintenance responsibility. This means you can focus on building new abilities while your promoted ability reaches more users.
+</Note>
+
+## Can I Request Promotion?
+
+Yes! If you believe your community ability is ready for official status:
+
+<Steps>
+  <Step title="Check the criteria">
+    Review the thresholds above and ensure your ability meets or exceeds them
+  </Step>
+  <Step title="Open an issue">
+    Create a GitHub issue with the title `[Promotion Request] your-ability-name`
+  </Step>
+  <Step title="Provide context">
+    Include:
+    - Current install count (if you have access to metrics)
+    - Any user feedback or testimonials
+    - Bug history and resolution times
+    - Why you think it fills a unique gap
+  </Step>
+  <Step title="Wait for review">
+    The team will review and respond with next steps
+  </Step>
+</Steps>
+
+<Warning>
+  Self-nominations are welcome, but promotion is not guaranteed. We evaluate based on overall ecosystem fit and maintenance capacity.
+</Warning>
+
+## What Happens to Your Community Ability
+
+When promoted:
+
+1. **Code Migration** - The ability moves from `community/your-ability-name/` to `official/your-ability-name/`
+2. **Badge Update** - Marketplace listing changes from orange (community) to blue (official) badge
+3. **Placement Change** - May appear in featured sections or priority listings
+4. **Maintenance Transfer** - OpenHome team takes over:
+   - Bug fixes and updates
+   - SDK compatibility when APIs change
+   - User support requests
+5. **Credit Preservation** - Your authorship remains visible everywhere:
+   - README header with your name and GitHub profile
+   - CONTRIBUTORS.md entry
+   - Release notes mentioning you
+
+<Note>
+  You can still contribute improvements via PRs, but you're no longer required to maintain it.
+</Note>
+
+## Examples of Promotion-Worthy Abilities
+
+While we can't guarantee promotion, here are traits that make abilities stand out:
+
+<AccordionGroup>
+  <Accordion title="High utility, broad appeal">
+    Abilities that solve common problems many users face:
+    - Timer/reminder systems
+    - Unit converters
+    - Common API integrations (weather, news, calendar)
+    - Productivity tools (note-taking, task management)
+  </Accordion>
+  
+  <Accordion title="Excellent documentation">
+    Clear README with:
+    - Concise "What It Does" section
+    - Well-chosen trigger word suggestions
+    - Complete setup instructions
+    - Example conversations showing typical usage
+  </Accordion>
+  
+  <Accordion title="Robust error handling">
+    Gracefully handles:
+    - API failures and timeouts
+    - Invalid user input
+    - Rate limiting
+    - Network issues
+    - Provides helpful error messages to users
+  </Accordion>
+  
+  <Accordion title="Natural conversation flow">
+    Voice-first design:
+    - Short, conversational responses
+    - Clear prompts for user input
+    - Exit/stop handling in loops
+    - Confirms actions before executing
+  </Accordion>
+  
+  <Accordion title="Clean, maintainable code">
+    Well-structured implementation:
+    - Follows SDK patterns exactly
+    - Comments for complex logic
+    - Consistent code style
+    - No code smells or anti-patterns
+  </Accordion>
+</AccordionGroup>
+
+## Timeline Expectations
+
+Promotion doesn't happen overnight. Here's what to expect:
+
+| Phase | Typical Timeline |
+|-------|------------------|
+| Reach 50+ installs | 2-6 months after submission |
+| Stability period | 30+ days without critical bugs |
+| Initial contact | Within 1-2 weeks of meeting criteria |
+| Deep review | 1-3 weeks |
+| Promotion (if approved) | 1-2 weeks after review completion |
+
+<Note>
+  These are estimates. Some abilities are promoted faster, others take longer based on ecosystem priorities and maintenance capacity.
+</Note>
+
+## Tips for Increasing Promotion Chances
+
+<Steps>
+  <Step title="Build something useful">
+    Focus on real problems that many users face, not niche use cases
+  </Step>
+  <Step title="Document thoroughly">
+    A great README with clear examples helps users understand and adopt your ability
+  </Step>
+  <Step title="Be responsive">
+    Quickly address issues and respond to user feedback
+  </Step>
+  <Step title="Follow best practices">
+    Study official abilities and match their code quality and patterns
+  </Step>
+  <Step title="Promote your ability">
+    Share it in the Discord, on social media, or in relevant communities
+  </Step>
+  <Step title="Iterate based on feedback">
+    Use issues and comments to improve your ability over time
+  </Step>
+</Steps>
+
+## Staying Informed
+
+To stay updated on promotions and see what kinds of abilities are being promoted:
+
+- Watch the [abilities repository](https://github.com/openhome-dev/abilities) for commits moving abilities from `community/` to `official/`
+- Check release notes for new official abilities
+- Join the [Discord](https://discord.gg/openhome) where promotions are often announced
+- Follow the [OpenHome blog or changelog](https://openhome.com) for major updates
+
+## Questions?
+
+If you have questions about promotion:
+
+- **General questions** → Ask in [Discord](https://discord.gg/openhome)
+- **Specific to your ability** → Open a GitHub issue with `[Promotion Request]` in the title
+- **Want to understand criteria better** → Review [Building Great Abilities](https://github.com/openhome-dev/abilities/blob/dev/docs/Building_Great_OpenHome_Abilities.md)
+
+Remember: Promotion is a recognition of quality and impact, but community abilities are just as valuable to the ecosystem. Build great abilities regardless of badge color!
