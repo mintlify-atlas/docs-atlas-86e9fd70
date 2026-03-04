@@ -176,6 +176,162 @@ Most Abilities don't need `send_interrupt_signal()`. Use it only when you need m
 
 ---
 
+## exec_local_command()
+
+Executes a command on the user's local device (Mac, Raspberry Pi, etc.) via WebSocket.
+
+### Signature
+
+```python
+response = await self.capability_worker.exec_local_command(command)
+```
+
+**Async** - Use `await`
+
+**Parameters:**
+- `command` (str): Shell command to execute on the local device
+
+**Returns:** `dict` with command output or error information
+
+### When to Use
+
+Use `exec_local_command()` when you need to:
+- Execute terminal commands on the user's Mac/PC
+- Control local applications or services
+- Access files on the user's device
+- Run scripts that require local resources
+
+<Warning>
+Abilities run in OpenHome's cloud sandbox. `exec_local_command()` bridges the cloud → device gap via WebSocket.
+</Warning>
+
+### Example
+
+```python
+async def run(self):
+    # Get user's request
+    await self.capability_worker.speak("What command would you like to run?")
+    user_input = await self.capability_worker.user_response()
+    
+    # Generate safe command using LLM
+    prompt = f"Convert this request to a safe Mac terminal command: {user_input}"
+    command = self.capability_worker.text_to_text_response(prompt)
+    
+    # Execute on local device
+    await self.capability_worker.speak(f"Running: {command}")
+    result = await self.capability_worker.exec_local_command(command)
+    
+    # Speak result
+    self.worker.editor_logging_handler.info(f"Command result: {result}")
+    await self.capability_worker.speak("Command executed successfully.")
+    self.capability_worker.resume_normal_flow()
+```
+
+<Warning>
+**Security:** Always validate commands before executing. Never pass user input directly to `exec_local_command()` without sanitization.
+
+```python
+# ❌ DANGEROUS - User could say "rm -rf /"
+command = user_input
+await self.capability_worker.exec_local_command(command)
+
+# ✅ SAFE - Use LLM to validate and transform
+safe_command = self.capability_worker.text_to_text_response(
+    f"Convert to safe terminal command: {user_input}. If dangerous, return 'UNSAFE'"
+)
+if safe_command != "UNSAFE":
+    await self.capability_worker.exec_local_command(safe_command)
+```
+</Warning>
+
+### See Also
+
+- [OpenHome-local Template](/templates/basic) - Full example of LLM → terminal integration
+- [openclaw Template](/templates/api) - Desktop agent control
+
+---
+
+## send_email()
+
+Sends an email via SMTP. Useful for notifications, reports, or automated emails.
+
+### Signature
+
+```python
+status = self.capability_worker.send_email(
+    host="smtp.gmail.com",
+    port=465,
+    sender_email="your-email@gmail.com",
+    sender_password="your-app-password",
+    receiver_email="recipient@example.com",
+    cc_emails=[],
+    subject="Subject Line",
+    body="Email body text",
+    attachment_paths=[]
+)
+```
+
+**Synchronous** - Do NOT use `await`
+
+**Parameters:**
+- `host` (str): SMTP server hostname (e.g., `"smtp.gmail.com"`)
+- `port` (int): SMTP port (465 for SSL, 587 for TLS)
+- `sender_email` (str): Sender email address
+- `sender_password` (str): SMTP password or app password
+- `receiver_email` (str): Recipient email address
+- `cc_emails` (list): CC recipients (optional, default `[]`)
+- `subject` (str): Email subject line
+- `body` (str): Email body content
+- `attachment_paths` (list): List of filenames in Ability folder (optional)
+
+**Returns:** `bool` - `True` if sent successfully, `False` otherwise
+
+### Example
+
+```python
+async def run(self):
+    await self.capability_worker.speak("Sending your daily report...")
+    
+    # Generate report content
+    report = self.capability_worker.text_to_text_response(
+        "Generate a brief daily summary"
+    )
+    
+    # Send email
+    success = self.capability_worker.send_email(
+        host="smtp.gmail.com",
+        port=465,
+        sender_email="bot@example.com",
+        sender_password="app-password-here",
+        receiver_email="user@example.com",
+        cc_emails=[],
+        subject="Daily Report",
+        body=report,
+        attachment_paths=[]
+    )
+    
+    if success:
+        await self.capability_worker.speak("Report sent successfully.")
+    else:
+        await self.capability_worker.speak("Failed to send report.")
+    
+    self.capability_worker.resume_normal_flow()
+```
+
+<Note>
+**Gmail Users:** You must use an [App Password](https://support.google.com/accounts/answer/185833), not your regular Gmail password.
+</Note>
+
+<Warning>
+**Security:** Never hardcode credentials. Store them in environment variables or use the file storage system to prompt users for configuration on first run.
+</Warning>
+
+### See Also
+
+- [SendEmail Template](/templates/basic) - Complete email sending example
+
+---
+
 ## AgentWorker Reference
 
 Access `AgentWorker` via `self.worker` for logging, session management, and user connection info.
