@@ -1,0 +1,142 @@
+{
+  "projectType": "sdk-library",
+  "projectName": "OpenHome Abilities",
+  "projectDescription": "Open-source Python SDK for building modular voice AI plugins that extend OpenHome agents with custom capabilities.",
+  "theme": "palm",
+  "primaryColor": "#848484",
+  "lightColor": "#666360",
+  "darkColor": "#f5f4ef",
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Get Started",
+            "pages": [
+              "introduction",
+              "quickstart"
+            ]
+          },
+          {
+            "group": "Core Concepts",
+            "pages": [
+              "concepts/what-are-abilities",
+              "concepts/ability-types",
+              "concepts/trigger-words"
+            ]
+          },
+          {
+            "group": "Building Abilities",
+            "pages": [
+              "building/templates",
+              "building/patterns",
+              "building/testing",
+              "building/best-practices"
+            ]
+          },
+          {
+            "group": "Contributing",
+            "pages": [
+              "contributing/overview",
+              "contributing/submission-guide",
+              "contributing/review-checklist",
+              "contributing/promotion-path"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "API Reference",
+        "groups": [
+          {
+            "group": "SDK Reference",
+            "pages": [
+              "api/capability-worker",
+              "api/speaking",
+              "api/listening",
+              "api/llm",
+              "api/audio",
+              "api/files",
+              "api/flow-control"
+            ]
+          },
+          {
+            "group": "Templates",
+            "pages": [
+              "templates/basic",
+              "templates/api",
+              "templates/loop",
+              "templates/watcher",
+              "templates/alarm"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "Examples",
+        "groups": [
+          {
+            "group": "Official Abilities",
+            "pages": [
+              "examples/audius-music-dj",
+              "examples/basic-advisor",
+              "examples/quiz-game",
+              "examples/weather",
+              "examples/perplexity-search"
+            ]
+          },
+          {
+            "group": "Community Showcase",
+            "pages": [
+              "examples/community-overview"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "Modular voice AI plugin system with Python SDK",
+    "Multiple ability types: Skills, Background Daemons, and Local",
+    "Complete I/O control: TTS, speech-to-text, audio playback/recording",
+    "LLM integration for text generation and conversation context",
+    "8+ official abilities and 50+ community contributions",
+    "Template library with patterns for common use cases",
+    "WebSocket communication and local command execution",
+    "File storage for persistent state and IPC"
+  ],
+  "publicApiSurface": [
+    "CapabilityWorker.speak(text)",
+    "CapabilityWorker.user_response()",
+    "CapabilityWorker.text_to_text_response(prompt, history, system_prompt)",
+    "CapabilityWorker.play_audio(file_content)",
+    "CapabilityWorker.run_io_loop(text)",
+    "CapabilityWorker.run_confirmation_loop(text)",
+    "CapabilityWorker.resume_normal_flow()",
+    "CapabilityWorker.text_to_speech(text, voice_id)",
+    "CapabilityWorker.wait_for_complete_transcription()",
+    "CapabilityWorker.play_from_audio_file(file_name)",
+    "CapabilityWorker.start_audio_recording()",
+    "CapabilityWorker.stop_audio_recording()",
+    "CapabilityWorker.get_audio_recording()",
+    "CapabilityWorker.stream_init()",
+    "CapabilityWorker.send_audio_data_in_stream(audio_bytes, chunk_size)",
+    "CapabilityWorker.stream_end()",
+    "CapabilityWorker.read_file(file_name)",
+    "CapabilityWorker.write_file(file_name, content)",
+    "CapabilityWorker.delete_file(file_name)",
+    "CapabilityWorker.send_data_over_websocket(data_type, data)",
+    "CapabilityWorker.send_devkit_action(action)",
+    "CapabilityWorker.send_interrupt_signal()",
+    "CapabilityWorker.get_timezone()",
+    "CapabilityWorker.get_full_message_history()",
+    "CapabilityWorker.exec_local_command(command)",
+    "AgentWorker.editor_logging_handler.info/error/warning(message)",
+    "AgentWorker.session_tasks.create(coroutine)",
+    "AgentWorker.session_tasks.sleep(seconds)",
+    "AgentWorker.music_mode_event.set/clear()",
+    "MatchingCapability.register_capability()",
+    "MatchingCapability.call(worker)"
+  ]
+}
